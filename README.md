@@ -6,11 +6,12 @@
 
 - Google Maps 기반 전 세계 장소 검색과 선택
 - 카카오톡·네이버지도·카카오맵 공유문 붙여넣기, 지도 위치 미리보기, 확인 후 저장
-- 지도 클릭으로 임의 좌표 직접 저장
+- 지도 빈 곳을 우클릭해 임의 좌표 직접 저장
 - 맛집·명소 기본 카테고리와 사용자 카테고리 추가
 - 국내·해외, 국가, 시·군·구 검색 필터와 지도 마커 동시 갱신
 - 방문 예정 월 지정, 월별 목록화 및 필터
 - 장소 카드와 지도 마커 롤오버 메모, 선명한 확대 포커스, 수정, 삭제
+- 지도 마커·장소 목록을 `Ctrl+클릭`해 클릭 순서 경로 또는 순서 무관 최적 자동차 경로 계산
 - `Ctrl` 없이 마우스 휠로 지도 확대·축소
 - 브라우저 GPU 호환성을 고려한 명시적 래스터 지도 렌더링
 - 로그인 보호, JSON 내보내기, SQLite 영구 저장
@@ -32,12 +33,12 @@ Container Manager를 권장합니다. Web Station만으로는 로그인 API와 S
 ## 1. Google Maps 준비
 
 1. [Google Cloud Console](https://console.cloud.google.com/)에서 프로젝트를 만들고 결제 계정을 연결합니다.
-2. **Maps JavaScript API**와 **Places API (New)**를 활성화합니다.
+2. **Maps JavaScript API**, **Places API (New)**, **Routes API**를 활성화합니다.
 3. 사용자 인증 정보에서 API 키를 만듭니다.
 4. 애플리케이션 제한을 **웹사이트**로 설정하고 다음 리퍼러만 허용합니다.
    - `https://joy.lhsstart.synology.me/*`
    - 초기 내부 시험이 필요하면 `http://localhost:7330/*`를 임시 추가
-5. API 제한을 **Maps JavaScript API**, **Places API (New)**로 한정합니다.
+5. API 제한을 **Maps JavaScript API**, **Places API (New)**, **Routes API**로 한정합니다.
 6. Map Management에서 JavaScript용 Map ID를 만들거나, 첫 시험에는 `DEMO_MAP_ID`를 사용합니다.
 
 API 키는 브라우저에 전달되는 공개 식별자입니다. 비밀로 숨기는 대신 반드시 허용 도메인과 허용 API를 제한해야 합니다.
@@ -80,11 +81,11 @@ NAS 자체에서 확인할 주소는 `http://127.0.0.1:7330`입니다. 기본 Co
 
 - Google Cloud Billing에서 소액 예산 알림을 설정합니다. 예산 알림은 자동 차단이 아닙니다.
 - Google Maps Platform의 Quotas에서 일일 요청 상한을 직접 낮춥니다.
-- 시작 권장값: Dynamic Maps 100회/일, Text Search 100회/일, Place Details 200회/일.
+- 시작 권장값: Dynamic Maps 100회/일, Text Search 100회/일, Place Details 200회/일, Compute Routes 50회/일, Compute Route Matrix 500요소/일.
 - API 키의 HTTP 리퍼러와 API 제한을 반드시 적용합니다.
 - 공개 회원가입 기능을 두지 말고 긴 로그인 비밀번호를 사용합니다.
 
-현재 앱은 검색 버튼을 누를 때만 Text Search를 호출하고, 저장 장소의 좌표는 29일 동안 재사용한 뒤 Place Details의 `location` 필드만 갱신합니다. 불필요한 호출을 줄이기 위한 설계입니다.
+현재 앱은 검색 버튼을 누를 때만 Text Search를 호출하고, 저장 장소의 좌표는 29일 동안 재사용한 뒤 Place Details의 `location` 필드만 갱신합니다. 경로 API는 경로 계산 버튼을 눌렀을 때만 호출하며, 순서 무관 최적화는 비용과 계산량을 제한하기 위해 최대 10곳까지만 지원합니다.
 
 ## 데이터와 백업
 

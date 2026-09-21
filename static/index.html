@@ -109,12 +109,23 @@
         </div>
         <div class="map-actions">
           <button id="share-message-button" class="map-action secondary-map-action" type="button">⌁ 공유문 붙여넣기</button>
-          <button id="manual-pin-button" class="map-action" type="button">＋ 지도에서 직접 지정</button>
+          <span class="map-shortcuts">우클릭: 직접 지정 · Ctrl+클릭: 경로 선택</span>
         </div>
-        <div id="pick-banner" class="pick-banner" hidden>
-          저장할 위치를 지도에서 클릭하세요.
-          <button id="cancel-pick-button" type="button">취소</button>
-        </div>
+        <section id="route-planner" class="route-planner" aria-live="polite" hidden>
+          <div class="route-planner-header">
+            <div>
+              <span>ROUTE PLANNER</span>
+              <strong id="route-count">선택한 장소 0곳</strong>
+            </div>
+            <button id="route-clear-button" class="icon-button" type="button" aria-label="경로 선택 해제" title="경로 선택 해제">×</button>
+          </div>
+          <ol id="route-stop-list" class="route-stop-list"></ol>
+          <p id="route-status" class="route-status">Ctrl을 누른 채 장소를 2곳 이상 선택하세요.</p>
+          <div class="route-planner-actions">
+            <button id="route-ordered-button" class="secondary-button" type="button">① 클릭 순서 경로</button>
+            <button id="route-optimal-button" class="primary-button" type="button">② 순서 무관 최적 경로</button>
+          </div>
+        </section>
         <section id="share-confirm-card" class="share-confirm-card" aria-live="polite" hidden>
           <div class="share-confirm-copy">
             <span class="share-confirm-kicker">공유문 위치 확인</span>

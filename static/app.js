@@ -11,13 +11,18 @@ const state = {
   map: null,
   AdvancedMarkerElement: null,
   Place: null,
+  Route: null,
+  RouteMatrix: null,
   hoverInfoWindow: null,
   markers: new Map(),
+  routePlaceIds: [],
+  routeDisplayIds: [],
+  routePolylines: [],
+  routeModifierPressed: false,
   sharePreviewMarker: null,
   pendingSharedPlace: null,
   drawerFromShared: false,
   activePlaceId: null,
-  pickMode: false,
   currentView: "saved",
   toastTimer: null,
 };
@@ -57,9 +62,13 @@ const els = {
   shareConfirmButton: $("#share-confirm-button"),
   shareRetryButton: $("#share-retry-button"),
   shareCancelButton: $("#share-cancel-button"),
-  manualPinButton: $("#manual-pin-button"),
-  pickBanner: $("#pick-banner"),
-  cancelPickButton: $("#cancel-pick-button"),
+  routePlanner: $("#route-planner"),
+  routeCount: $("#route-count"),
+  routeStopList: $("#route-stop-list"),
+  routeStatus: $("#route-status"),
+  routeOrderedButton: $("#route-ordered-button"),
+  routeOptimalButton: $("#route-optimal-button"),
+  routeClearButton: $("#route-clear-button"),
   mapLegend: $("#map-legend"),
   drawer: $("#place-drawer"),
   drawerBackdrop: $("#drawer-backdrop"),
@@ -169,7 +178,6 @@ async function initializeApp() {
       refreshStaleLocations();
     } else {
       els.mapMessage.hidden = false;
-      els.manualPinButton.hidden = true;
     }
   } catch (error) {
     toast(error.message, true);
@@ -183,7 +191,8 @@ function bindEvents() {
   els.searchForm.addEventListener("submit", handleSearch);
   els.savedTab.addEventListener("click", () => setView("saved"));
   els.searchTab.addEventListener("click", () => setView("search"));
-  [els.categoryFilter, els.scopeFilter, els.monthFilter, els.countryFilter].forEach((element) => {
+  els.categoryFilter.addEventListener("change", () => applyFilters(false));
+  [els.scopeFilter, els.monthFilter, els.countryFilter].forEach((element) => {
     element.addEventListener("change", () => applyFilters(true));
   });
   els.areaSearch.addEventListener("input", () => applyFilters(true));
@@ -191,8 +200,9 @@ function bindEvents() {
   els.shareConfirmButton.addEventListener("click", confirmSharedPlace);
   els.shareRetryButton.addEventListener("click", retrySharedPlaceSearch);
   els.shareCancelButton.addEventListener("click", clearSharePreview);
-  els.manualPinButton.addEventListener("click", startPickMode);
-  els.cancelPickButton.addEventListener("click", stopPickMode);
+  els.routeOrderedButton.addEventListener("click", () => calculateSelectedRoute("ordered"));
+  els.routeOptimalButton.addEventListener("click", () => calculateSelectedRoute("optimal"));
+  els.routeClearButton.addEventListener("click", clearRouteSelection);
   els.drawerClose.addEventListener("click", closeDrawer);
   els.drawerBackdrop.addEventListener("click", closeDrawer);
   els.cancelPlaceButton.addEventListener("click", closeDrawer);
@@ -205,8 +215,14 @@ function bindEvents() {
   els.categoryDialogClose.addEventListener("click", () => els.categoryDialog.close());
   els.categoryForm.addEventListener("submit", createCategory);
   document.addEventListener("keydown", (event) => {
+    state.routeModifierPressed = event.ctrlKey || event.metaKey;
     if (event.key === "Escape" && els.drawer.classList.contains("is-open")) closeDrawer();
   });
+  document.addEventListener("keyup", (event) => {
+    state.routeModifierPressed = event.ctrlKey || event.metaKey;
+  });
+  window.addEventListener("blur", () => { state.routeModifierPressed = false; });
+  els.map.addEventListener("contextmenu", (event) => event.preventDefault());
 }
 
 async function handleLogin(event) {
@@ -271,11 +287,10 @@ async function initializeMap() {
     gestureHandling: "greedy",
   });
   state.hoverInfoWindow = new google.maps.InfoWindow({ disableAutoPan: true });
-  state.map.addListener("click", (event) => {
-    if (!state.pickMode || !event.latLng) return;
-    const location = event.latLng.toJSON();
-    stopPickMode();
-    openDrawerForManual(location);
+  state.map.addListener("contextmenu", (event) => {
+    if (!event.latLng) return;
+    openDrawerForManual(event.latLng.toJSON());
+    toast("우클릭한 위치를 새 장소로 지정했습니다.");
   });
 }
 
@@ -554,6 +569,14 @@ function getPlaceScope(place) {
   return place.country_code ? "international" : "unknown";
 }
 
+function getRouteVisualIds() {
+  return state.routeDisplayIds.length ? state.routeDisplayIds : state.routePlaceIds;
+}
+
+function getRouteIndex(placeId) {
+  return getRouteVisualIds().indexOf(placeId);
+}
+
 function getAreaSearchText(place) {
   return [place.region, place.locality, place.district].filter(Boolean).join(" ").toLocaleLowerCase("ko");
 }
@@ -633,8 +656,14 @@ function savedPlaceCard(place) {
   card.dataset.id = place.id;
   card.style.setProperty("--category-color", place.category_color);
   if (place.id === state.activePlaceId) card.classList.add("is-active");
+  const routeIndex = getRouteIndex(place.id);
+  if (routeIndex >= 0) card.classList.add("is-route-selected");
   const dot = document.createElement("span");
   dot.className = "category-dot";
+  if (routeIndex >= 0) {
+    dot.classList.add("route-sequence");
+    dot.textContent = String(routeIndex + 1);
+  }
   const content = document.createElement("span");
   const name = document.createElement("strong");
   name.textContent = place.label;
@@ -662,7 +691,12 @@ function savedPlaceCard(place) {
   arrow.className = "place-card-arrow";
   arrow.textContent = "›";
   card.append(dot, content, arrow);
-  card.addEventListener("click", () => {
+  card.addEventListener("click", (event) => {
+    if (event.ctrlKey || event.metaKey) {
+      event.preventDefault();
+      toggleRoutePlace(place);
+      return;
+    }
     selectPlace(place);
     openDrawerForEdit(place);
   });
@@ -681,7 +715,13 @@ function renderMarkers(fitMap = false) {
     pin.className = "map-pin";
     pin.style.setProperty("--pin-color", place.category_color);
     const glyph = document.createElement("span");
-    glyph.textContent = place.category_name.slice(0, 1);
+    const routeIndex = getRouteIndex(place.id);
+    if (routeIndex >= 0) {
+      pin.classList.add("is-route-selected");
+      glyph.textContent = String(routeIndex + 1);
+    } else {
+      glyph.textContent = place.category_name.slice(0, 1);
+    }
     pin.appendChild(glyph);
     const marker = new state.AdvancedMarkerElement({ map: state.map, position, title: place.label, content: pin });
     if (place.memo) {
@@ -699,6 +739,10 @@ function renderMarkers(fitMap = false) {
       pin.addEventListener("mouseleave", () => state.hoverInfoWindow?.close());
     }
     marker.addListener("click", () => {
+      if (state.routeModifierPressed) {
+        toggleRoutePlace(place);
+        return;
+      }
       selectPlace(place);
       openDrawerForEdit(place);
     });
@@ -713,6 +757,241 @@ function renderMarkers(fitMap = false) {
         if (state.map.getZoom() > 14) state.map.setZoom(14);
       });
     }
+  }
+}
+
+function getSelectedRoutePlaces() {
+  return state.routePlaceIds
+    .map((id) => state.places.find((place) => place.id === id))
+    .filter(Boolean);
+}
+
+function toggleRoutePlace(place) {
+  if (!Number.isFinite(place.latitude) || !Number.isFinite(place.longitude) || place.location_cache_stale) {
+    toast("좌표가 확인된 장소만 경로에 추가할 수 있습니다.", true);
+    return;
+  }
+  clearRouteDrawing();
+  const index = state.routePlaceIds.indexOf(place.id);
+  if (index >= 0) {
+    state.routePlaceIds.splice(index, 1);
+  } else {
+    if (state.routePlaceIds.length >= 27) {
+      toast("한 경로에는 최대 27곳까지 선택할 수 있습니다.", true);
+      return;
+    }
+    state.routePlaceIds.push(place.id);
+  }
+  updateRouteSelectionVisuals();
+  renderRoutePlanner(true);
+}
+
+function updateRouteSelectionVisuals() {
+  const visualIds = getRouteVisualIds();
+  document.querySelectorAll(".place-card[data-id]").forEach((card) => {
+    const placeId = Number(card.dataset.id);
+    const index = visualIds.indexOf(placeId);
+    const dot = card.querySelector(".category-dot");
+    const place = state.places.find((item) => item.id === placeId);
+    card.classList.toggle("is-route-selected", index >= 0);
+    dot?.classList.toggle("route-sequence", index >= 0);
+    if (dot) dot.textContent = index >= 0 ? String(index + 1) : "";
+    if (dot && place) dot.style.setProperty("--category-color", place.category_color);
+  });
+  state.markers.forEach((marker, placeId) => {
+    const index = visualIds.indexOf(placeId);
+    const place = state.places.find((item) => item.id === placeId);
+    marker.content?.classList.toggle("is-route-selected", index >= 0);
+    const glyph = marker.content?.querySelector("span");
+    if (glyph && place) glyph.textContent = index >= 0 ? String(index + 1) : place.category_name.slice(0, 1);
+  });
+}
+
+function renderRoutePlanner(resetStatus = false) {
+  const placesById = new Map(state.places.map((place) => [place.id, place]));
+  const visualIds = getRouteVisualIds();
+  els.routePlanner.hidden = state.routePlaceIds.length === 0;
+  els.routeCount.textContent = `선택한 장소 ${state.routePlaceIds.length}곳`;
+  els.routeStopList.replaceChildren();
+  visualIds.forEach((id, index) => {
+    const place = placesById.get(id);
+    if (!place) return;
+    const item = document.createElement("li");
+    const number = document.createElement("span");
+    number.textContent = String(index + 1);
+    const name = document.createElement("strong");
+    name.textContent = place.label;
+    item.append(number, name);
+    els.routeStopList.appendChild(item);
+  });
+  const hasEnough = state.routePlaceIds.length >= 2;
+  els.routeOrderedButton.disabled = !hasEnough;
+  els.routeOptimalButton.disabled = !hasEnough || state.routePlaceIds.length > 10;
+  els.routeOptimalButton.title = state.routePlaceIds.length > 10 ? "순서 무관 최적화는 최대 10곳까지 지원합니다." : "";
+  if (resetStatus) {
+    els.routeStatus.textContent = !hasEnough
+      ? "Ctrl을 누른 채 장소를 한 곳 더 선택하세요."
+      : state.routePlaceIds.length > 10
+        ? "클릭 순서 경로는 가능하지만 순서 무관 최적화는 최대 10곳입니다."
+        : "두 방식 중 하나를 눌러 자동차 경로를 계산하세요.";
+  }
+}
+
+function clearRoutePolylines() {
+  state.routePolylines.forEach((polyline) => polyline.setMap(null));
+  state.routePolylines = [];
+}
+
+function clearRouteDrawing() {
+  clearRoutePolylines();
+  state.routeDisplayIds = [];
+}
+
+function clearRouteSelection() {
+  clearRouteDrawing();
+  state.routePlaceIds = [];
+  updateRouteSelectionVisuals();
+  renderRoutePlanner(true);
+}
+
+async function ensureRoutesLibrary() {
+  if (state.Route && state.RouteMatrix) return;
+  const { Route, RouteMatrix } = await google.maps.importLibrary("routes");
+  state.Route = Route;
+  state.RouteMatrix = RouteMatrix;
+}
+
+function routeLocation(place) {
+  return { lat: place.latitude, lng: place.longitude };
+}
+
+async function findOptimalOpenRoute(places) {
+  const locations = places.map(routeLocation);
+  const { matrix } = await state.RouteMatrix.computeRouteMatrix({
+    origins: locations,
+    destinations: locations,
+    travelMode: "DRIVING",
+    fields: ["durationMillis", "condition"],
+  });
+  const size = places.length;
+  const costs = Array.from({ length: size }, (_, from) =>
+    Array.from({ length: size }, (_, to) => {
+      if (from === to) return 0;
+      const item = matrix?.rows?.[from]?.items?.[to];
+      return Number.isFinite(item?.durationMillis) ? item.durationMillis : Number.POSITIVE_INFINITY;
+    })
+  );
+  const stateCount = 1 << size;
+  const best = Array.from({ length: stateCount }, () => new Float64Array(size).fill(Number.POSITIVE_INFINITY));
+  const previous = Array.from({ length: stateCount }, () => new Int16Array(size).fill(-1));
+  for (let start = 0; start < size; start += 1) best[1 << start][start] = 0;
+  for (let mask = 1; mask < stateCount; mask += 1) {
+    for (let last = 0; last < size; last += 1) {
+      const current = best[mask][last];
+      if (!Number.isFinite(current)) continue;
+      for (let next = 0; next < size; next += 1) {
+        if (mask & (1 << next)) continue;
+        const nextCost = current + costs[last][next];
+        const nextMask = mask | (1 << next);
+        if (nextCost < best[nextMask][next]) {
+          best[nextMask][next] = nextCost;
+          previous[nextMask][next] = last;
+        }
+      }
+    }
+  }
+  const fullMask = stateCount - 1;
+  let last = -1;
+  let lowest = Number.POSITIVE_INFINITY;
+  for (let candidate = 0; candidate < size; candidate += 1) {
+    if (best[fullMask][candidate] < lowest) {
+      lowest = best[fullMask][candidate];
+      last = candidate;
+    }
+  }
+  if (last < 0 || !Number.isFinite(lowest)) throw new Error("선택한 장소를 모두 연결하는 자동차 경로가 없습니다.");
+  const order = [];
+  let mask = fullMask;
+  while (last >= 0) {
+    order.push(last);
+    const nextLast = previous[mask][last];
+    mask ^= 1 << last;
+    last = nextLast;
+  }
+  return order.reverse().map((index) => places[index]);
+}
+
+function formatRouteDistance(meters) {
+  if (!Number.isFinite(meters)) return "거리 정보 없음";
+  return meters < 1000 ? `${Math.round(meters)}m` : `${(meters / 1000).toFixed(meters < 10000 ? 1 : 0)}km`;
+}
+
+function formatRouteDuration(milliseconds) {
+  if (!Number.isFinite(milliseconds)) return "시간 정보 없음";
+  const totalMinutes = Math.max(1, Math.round(milliseconds / 60000));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return hours ? `${hours}시간 ${minutes ? `${minutes}분` : ""}`.trim() : `${minutes}분`;
+}
+
+async function drawDrivingRoute(places) {
+  const locations = places.map(routeLocation);
+  const request = {
+    origin: locations[0],
+    destination: locations.at(-1),
+    travelMode: "DRIVING",
+    fields: ["path", "viewport", "distanceMeters", "durationMillis"],
+  };
+  if (locations.length > 2) request.intermediates = locations.slice(1, -1).map((location) => ({ location }));
+  const { routes = [] } = await state.Route.computeRoutes(request);
+  if (!routes.length) throw new Error("선택한 장소를 연결하는 자동차 경로가 없습니다.");
+  const route = routes[0];
+  clearRoutePolylines();
+  state.routePolylines = route.createPolylines();
+  state.routePolylines.forEach((polyline) => {
+    polyline.setOptions({ strokeColor: "#2d6cdf", strokeOpacity: .9, strokeWeight: 6, zIndex: 20 });
+    polyline.setMap(state.map);
+  });
+  if (route.viewport) state.map.fitBounds(route.viewport, 70);
+  return route;
+}
+
+async function calculateSelectedRoute(mode) {
+  const selected = getSelectedRoutePlaces();
+  if (selected.length < 2) {
+    toast("Ctrl을 누른 채 장소를 2곳 이상 선택해 주세요.", true);
+    return;
+  }
+  if (mode === "optimal" && selected.length > 10) {
+    toast("순서 무관 최적화는 최대 10곳까지 지원합니다.", true);
+    return;
+  }
+  els.routeOrderedButton.disabled = true;
+  els.routeOptimalButton.disabled = true;
+  els.routeStatus.classList.add("is-loading");
+  els.routeStatus.textContent = mode === "optimal" ? "모든 장소 사이의 이동시간을 비교하는 중…" : "선택한 순서로 경로를 계산하는 중…";
+  try {
+    await ensureRoutesLibrary();
+    const ordered = mode === "optimal" ? await findOptimalOpenRoute(selected) : selected;
+    const route = await drawDrivingRoute(ordered);
+    state.routeDisplayIds = ordered.map((place) => place.id);
+    updateRouteSelectionVisuals();
+    renderRoutePlanner(false);
+    const label = mode === "optimal" ? "순서 무관 최적 경로" : "클릭 순서 경로";
+    els.routeStatus.textContent = `${label} · ${formatRouteDistance(route.distanceMeters)} · 약 ${formatRouteDuration(route.durationMillis)}`;
+    toast(`${label}를 지도에 표시했습니다.`);
+  } catch (error) {
+    console.error(error);
+    const message = /모두 연결|자동차 경로/.test(error.message)
+      ? error.message
+      : "경로를 계산하지 못했습니다. Google Cloud에서 Routes API를 활성화하고 API 키 제한에 추가해 주세요.";
+    els.routeStatus.textContent = message;
+    toast(message, true);
+  } finally {
+    els.routeStatus.classList.remove("is-loading");
+    const hasEnough = state.routePlaceIds.length >= 2;
+    els.routeOrderedButton.disabled = !hasEnough;
+    els.routeOptimalButton.disabled = !hasEnough || state.routePlaceIds.length > 10;
   }
 }
 
@@ -876,6 +1155,11 @@ async function deleteCurrentPlace() {
   try {
     await api(`/api/places/${id}`, { method: "DELETE", body: "{}" });
     state.places = state.places.filter((place) => place.id !== id);
+    if (state.routePlaceIds.includes(id)) {
+      clearRouteDrawing();
+      state.routePlaceIds = state.routePlaceIds.filter((placeId) => placeId !== id);
+      renderRoutePlanner(true);
+    }
     state.activePlaceId = null;
     await reloadCategories();
     renderFilters();
@@ -885,21 +1169,6 @@ async function deleteCurrentPlace() {
   } catch (error) {
     toast(error.message, true);
   }
-}
-
-function startPickMode() {
-  if (!state.map) return;
-  state.pickMode = true;
-  els.pickBanner.hidden = false;
-  els.manualPinButton.hidden = true;
-  els.map.style.cursor = "crosshair";
-}
-
-function stopPickMode() {
-  state.pickMode = false;
-  els.pickBanner.hidden = true;
-  els.manualPinButton.hidden = false;
-  els.map.style.cursor = "";
 }
 
 function openCategoryDialog() {
