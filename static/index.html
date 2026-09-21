@@ -7,7 +7,7 @@
   <meta name="description" content="전 세계의 맛집과 명소를 기록하는 개인 지도">
   <title>JOY MAP</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/app.css">
+  <link rel="stylesheet" href="/app.css?v=20260921-1">
 </head>
 <body>
   <section id="login-screen" class="login-screen" aria-labelledby="login-title">
@@ -152,7 +152,7 @@
           <p id="drawer-kicker" class="eyebrow">SAVE A PLACE</p>
           <h2 id="drawer-title">장소 저장</h2>
         </div>
-        <button id="drawer-close" class="icon-button" type="button" aria-label="닫기">×</button>
+        <button id="drawer-close" class="icon-button" type="button" aria-label="장소 창 닫기" data-ui-action="close-drawer">×</button>
       </div>
 
       <div id="source-preview" class="source-preview" hidden>
@@ -207,7 +207,7 @@
       <div class="drawer-actions">
         <button id="delete-place-button" class="danger-button" type="button" hidden>삭제</button>
         <span class="action-spacer"></span>
-        <button id="cancel-place-button" class="secondary-button" type="button">취소</button>
+        <button id="cancel-place-button" class="secondary-button" type="button" data-ui-action="close-drawer">취소</button>
         <button class="primary-button" type="submit">저장</button>
       </div>
     </form>
@@ -220,7 +220,7 @@
           <p class="eyebrow">PASTE A SHARED PLACE</p>
           <h2>공유문으로 장소 찾기</h2>
         </div>
-        <button id="share-dialog-close" class="icon-button" type="button" aria-label="닫기">×</button>
+        <button id="share-dialog-close" class="icon-button" type="button" aria-label="공유문 창 닫기" data-ui-action="close-share-dialog">×</button>
       </div>
       <label class="field">
         <span>카카오톡·지도 공유문</span>
@@ -229,7 +229,7 @@
       <p class="policy-note">장소명과 주소를 추출해 Google 지도에서 가장 가까운 결과를 찾습니다. 저장하기 전에 검색 결과를 확인해 주세요.</p>
       <p id="share-status" class="inline-status compact-status" hidden></p>
       <div class="dialog-actions dialog-actions-split">
-        <button id="share-dialog-cancel" class="secondary-button" type="button">취소</button>
+        <button id="share-dialog-cancel" class="secondary-button" type="button" data-ui-action="close-share-dialog">취소</button>
         <button class="primary-button" type="submit">장소 찾기</button>
       </div>
     </form>
@@ -239,7 +239,7 @@
     <form id="category-form" method="dialog">
       <div class="dialog-header">
         <div><p class="eyebrow">ORGANIZE</p><h2>카테고리 추가</h2></div>
-        <button id="category-dialog-close" class="icon-button" type="button" aria-label="닫기">×</button>
+        <button id="category-dialog-close" class="icon-button" type="button" aria-label="카테고리 창 닫기" data-ui-action="close-category-dialog">×</button>
       </div>
       <label class="field"><span>이름</span><input id="category-name" maxlength="30" required placeholder="카페, 숙소, 쇼핑…"></label>
       <label class="field color-field"><span>표시 색상</span><input id="category-color" type="color" value="#7B5CFA"></label>
@@ -249,6 +249,6 @@
   </dialog>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="/app.js" defer></script>
+  <script src="/app.js?v=20260921-1" defer></script>
 </body>
 </html>

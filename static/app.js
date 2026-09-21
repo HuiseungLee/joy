@@ -19,6 +19,7 @@ const state = {
   routeDisplayIds: [],
   routePolylines: [],
   routeModifierPressed: false,
+  lastManualOpenAt: 0,
   sharePreviewMarker: null,
   pendingSharedPlace: null,
   drawerFromShared: false,
@@ -191,11 +192,10 @@ function bindEvents() {
   els.searchForm.addEventListener("submit", handleSearch);
   els.savedTab.addEventListener("click", () => setView("saved"));
   els.searchTab.addEventListener("click", () => setView("search"));
-  els.categoryFilter.addEventListener("change", () => applyFilters(false));
-  [els.scopeFilter, els.monthFilter, els.countryFilter].forEach((element) => {
-    element.addEventListener("change", () => applyFilters(true));
+  [els.categoryFilter, els.scopeFilter, els.monthFilter, els.countryFilter].forEach((element) => {
+    element.addEventListener("change", () => applyFilters(false));
   });
-  els.areaSearch.addEventListener("input", () => applyFilters(true));
+  els.areaSearch.addEventListener("input", () => applyFilters(false));
   els.shareMessageButton.addEventListener("click", openShareDialog);
   els.shareConfirmButton.addEventListener("click", confirmSharedPlace);
   els.shareRetryButton.addEventListener("click", retrySharedPlaceSearch);
@@ -203,17 +203,13 @@ function bindEvents() {
   els.routeOrderedButton.addEventListener("click", () => calculateSelectedRoute("ordered"));
   els.routeOptimalButton.addEventListener("click", () => calculateSelectedRoute("optimal"));
   els.routeClearButton.addEventListener("click", clearRouteSelection);
-  els.drawerClose.addEventListener("click", closeDrawer);
   els.drawerBackdrop.addEventListener("click", closeDrawer);
-  els.cancelPlaceButton.addEventListener("click", closeDrawer);
   els.placeForm.addEventListener("submit", savePlace);
   els.shareForm.addEventListener("submit", handleSharedMessage);
-  els.shareDialogClose.addEventListener("click", () => els.shareDialog.close());
-  els.shareDialogCancel.addEventListener("click", () => els.shareDialog.close());
   els.deletePlaceButton.addEventListener("click", deleteCurrentPlace);
   els.categoryManageButton.addEventListener("click", openCategoryDialog);
-  els.categoryDialogClose.addEventListener("click", () => els.categoryDialog.close());
   els.categoryForm.addEventListener("submit", createCategory);
+  document.addEventListener("click", handleUiAction, true);
   document.addEventListener("keydown", (event) => {
     state.routeModifierPressed = event.ctrlKey || event.metaKey;
     if (event.key === "Escape" && els.drawer.classList.contains("is-open")) closeDrawer();
@@ -222,7 +218,22 @@ function bindEvents() {
     state.routeModifierPressed = event.ctrlKey || event.metaKey;
   });
   window.addEventListener("blur", () => { state.routeModifierPressed = false; });
-  els.map.addEventListener("contextmenu", (event) => event.preventDefault());
+}
+
+function handleUiAction(event) {
+  const control = event.target.closest?.("[data-ui-action]");
+  if (!control) return;
+  const action = control.dataset.uiAction;
+  if (action === "close-drawer") {
+    event.preventDefault();
+    closeDrawer();
+  } else if (action === "close-share-dialog") {
+    event.preventDefault();
+    if (els.shareDialog.open) els.shareDialog.close();
+  } else if (action === "close-category-dialog") {
+    event.preventDefault();
+    if (els.categoryDialog.open) els.categoryDialog.close();
+  }
 }
 
 async function handleLogin(event) {
@@ -287,11 +298,19 @@ async function initializeMap() {
     gestureHandling: "greedy",
   });
   state.hoverInfoWindow = new google.maps.InfoWindow({ disableAutoPan: true });
-  state.map.addListener("contextmenu", (event) => {
+  const handleContextMenu = (event) => {
+    event.domEvent?.preventDefault?.();
     if (!event.latLng) return;
+    const now = Date.now();
+    if (now - state.lastManualOpenAt < 350) return;
+    state.lastManualOpenAt = now;
     openDrawerForManual(event.latLng.toJSON());
     toast("우클릭한 위치를 새 장소로 지정했습니다.");
-  });
+  };
+  state.map.addListener("contextmenu", handleContextMenu);
+  // Older Maps builds can still emit only rightclick. The time guard above
+  // prevents the compatibility event from opening the drawer twice.
+  state.map.addListener("rightclick", handleContextMenu);
 }
 
 function setView(view) {
@@ -723,7 +742,13 @@ function renderMarkers(fitMap = false) {
       glyph.textContent = place.category_name.slice(0, 1);
     }
     pin.appendChild(glyph);
-    const marker = new state.AdvancedMarkerElement({ map: state.map, position, title: place.label, content: pin });
+    const marker = new state.AdvancedMarkerElement({
+      map: state.map,
+      position,
+      title: place.label,
+      content: pin,
+      gmpClickable: true,
+    });
     if (place.memo) {
       const hoverCard = document.createElement("div");
       hoverCard.className = "map-note-card";
@@ -738,7 +763,10 @@ function renderMarkers(fitMap = false) {
       });
       pin.addEventListener("mouseleave", () => state.hoverInfoWindow?.close());
     }
-    marker.addListener("click", () => {
+    pin.addEventListener("pointerdown", (event) => {
+      state.routeModifierPressed = event.ctrlKey || event.metaKey;
+    });
+    marker.addEventListener("gmp-click", () => {
       if (state.routeModifierPressed) {
         toggleRoutePlace(place);
         return;
