@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#132238">
+  <meta name="description" content="전 세계의 맛집과 명소를 기록하는 개인 지도">
+  <title>JOY MAP</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <section id="login-screen" class="login-screen" aria-labelledby="login-title">
+    <div class="login-visual" aria-hidden="true">
+      <div class="globe-grid"></div>
+      <div class="route route-a"></div>
+      <div class="route route-b"></div>
+      <span class="visual-pin pin-a"></span>
+      <span class="visual-pin pin-b"></span>
+      <span class="visual-pin pin-c"></span>
+      <p>Places worth<br>remembering.</p>
+    </div>
+    <div class="login-panel">
+      <form id="login-form" class="login-card">
+        <div class="brand-mark">J</div>
+        <p class="eyebrow">PRIVATE PLACE ARCHIVE</p>
+        <h1 id="login-title">JOY MAP</h1>
+        <p class="login-copy">다시 가고 싶은 곳을 나만의 지도에 모아보세요.</p>
+        <label>
+          <span>아이디</span>
+          <input id="login-username" name="username" autocomplete="username" required value="admin">
+        </label>
+        <label>
+          <span>비밀번호</span>
+          <input id="login-password" name="password" type="password" autocomplete="current-password" required>
+        </label>
+        <p id="login-error" class="form-error" role="alert"></p>
+        <button class="primary-button login-button" type="submit">내 지도 열기</button>
+        <div class="legal-links"><a href="/privacy.html">개인정보 안내</a><a href="/terms.html">이용 안내</a></div>
+      </form>
+    </div>
+  </section>
+
+  <div id="app" class="app" hidden>
+    <header class="topbar">
+      <div class="brand-lockup">
+        <div class="brand-mark small">J</div>
+        <div><strong>JOY MAP</strong><span>MY WORLD, PINNED</span></div>
+      </div>
+      <div class="topbar-meta">
+        <span id="place-count" class="place-count">0 PLACES</span>
+        <button id="export-button" class="text-button" type="button">백업</button>
+        <button id="logout-button" class="icon-button" type="button" aria-label="로그아웃" title="로그아웃">↗</button>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <aside class="sidebar" aria-label="장소 검색 및 목록">
+        <div class="search-block">
+          <p class="eyebrow">EXPLORE THE WORLD</p>
+          <form id="place-search-form" class="search-form" role="search">
+            <input id="place-search-input" type="search" maxlength="120" placeholder="도쿄 라멘, 루브르 박물관…" aria-label="Google 장소 검색">
+            <button type="submit" aria-label="검색">검색</button>
+          </form>
+          <p class="search-hint">장소명과 도시를 함께 입력하면 더 정확합니다.</p>
+        </div>
+
+        <div class="view-tabs" role="tablist" aria-label="목록 보기">
+          <button id="saved-tab" class="tab is-active" type="button" role="tab" aria-selected="true">저장한 장소</button>
+          <button id="search-tab" class="tab" type="button" role="tab" aria-selected="false">검색 결과</button>
+        </div>
+
+        <section id="saved-view" class="panel-view" aria-labelledby="saved-tab">
+          <div class="filter-grid">
+            <select id="category-filter" aria-label="카테고리 필터"><option value="">모든 카테고리</option></select>
+            <select id="country-filter" aria-label="국가 필터"><option value="">모든 국가</option></select>
+            <select id="locality-filter" aria-label="도시·시군구 필터"><option value="">모든 도시·시군구</option></select>
+          </div>
+          <div class="list-toolbar">
+            <span id="filtered-count">0곳</span>
+            <button id="category-manage-button" class="subtle-button" type="button">＋ 카테고리</button>
+          </div>
+          <div id="saved-list" class="place-list" aria-live="polite"></div>
+        </section>
+
+        <section id="search-view" class="panel-view" aria-labelledby="search-tab" hidden>
+          <div id="search-status" class="inline-status">장소를 검색해 지도에 추가하세요.</div>
+          <div id="search-results" class="place-list" aria-live="polite"></div>
+        </section>
+      </aside>
+
+      <section class="map-stage" aria-label="지도">
+        <div id="map" class="map"></div>
+        <div id="map-message" class="map-message" hidden>
+          <strong>Google 지도 설정이 필요합니다</strong>
+          <span>환경변수에 API 키를 등록한 뒤 다시 시작해 주세요.</span>
+        </div>
+        <button id="manual-pin-button" class="map-action" type="button">＋ 지도에서 직접 지정</button>
+        <div id="pick-banner" class="pick-banner" hidden>
+          저장할 위치를 지도에서 클릭하세요.
+          <button id="cancel-pick-button" type="button">취소</button>
+        </div>
+        <div class="map-legend" id="map-legend"></div>
+      </section>
+    </main>
+  </div>
+
+  <div id="drawer-backdrop" class="backdrop" hidden></div>
+  <aside id="place-drawer" class="drawer" aria-labelledby="drawer-title" aria-hidden="true">
+    <form id="place-form">
+      <div class="drawer-header">
+        <div>
+          <p id="drawer-kicker" class="eyebrow">SAVE A PLACE</p>
+          <h2 id="drawer-title">장소 저장</h2>
+        </div>
+        <button id="drawer-close" class="icon-button" type="button" aria-label="닫기">×</button>
+      </div>
+
+      <div id="source-preview" class="source-preview" hidden>
+        <span>GOOGLE MAPS</span>
+        <strong id="source-name"></strong>
+        <p id="source-address"></p>
+      </div>
+
+      <input id="place-id" type="hidden">
+      <input id="provider" type="hidden">
+      <input id="provider-place-id" type="hidden">
+      <input id="latitude" type="hidden">
+      <input id="longitude" type="hidden">
+
+      <label class="field">
+        <span>저장 이름 <em>직접 확인해 주세요</em></span>
+        <input id="place-label" maxlength="120" required placeholder="나만 알아보기 쉬운 이름">
+      </label>
+      <label class="field">
+        <span>카테고리</span>
+        <select id="place-category" required></select>
+      </label>
+
+      <div class="section-label">지역 태그</div>
+      <div class="two-column">
+        <label class="field"><span>국가 코드</span><input id="country-code" maxlength="10" placeholder="KR, JP, US"></label>
+        <label class="field"><span>주·도</span><input id="region" maxlength="100" placeholder="서울특별시, California"></label>
+      </div>
+      <div class="two-column">
+        <label class="field"><span>도시·시군구</span><input id="locality" maxlength="100" placeholder="종로구, Paris"></label>
+        <label class="field"><span>세부 지역</span><input id="district" maxlength="100" placeholder="삼청동, Shibuya"></label>
+      </div>
+      <p class="policy-note">지역 태그와 저장 이름은 직접 확인한 내용으로 저장됩니다. Google 장소 정보는 저장하지 않습니다.</p>
+
+      <label class="field memo-field">
+        <span>메모</span>
+        <textarea id="memo" maxlength="5000" rows="6" placeholder="먹어볼 메뉴, 영업시간 메모, 다시 찾을 이유…"></textarea>
+      </label>
+
+      <div class="drawer-actions">
+        <button id="delete-place-button" class="danger-button" type="button" hidden>삭제</button>
+        <span class="action-spacer"></span>
+        <button id="cancel-place-button" class="secondary-button" type="button">취소</button>
+        <button class="primary-button" type="submit">저장</button>
+      </div>
+    </form>
+  </aside>
+
+  <dialog id="category-dialog" class="dialog">
+    <form id="category-form" method="dialog">
+      <div class="dialog-header">
+        <div><p class="eyebrow">ORGANIZE</p><h2>카테고리 추가</h2></div>
+        <button id="category-dialog-close" class="icon-button" type="button" aria-label="닫기">×</button>
+      </div>
+      <label class="field"><span>이름</span><input id="category-name" maxlength="30" required placeholder="카페, 숙소, 쇼핑…"></label>
+      <label class="field color-field"><span>표시 색상</span><input id="category-color" type="color" value="#7B5CFA"></label>
+      <div id="category-list" class="category-list"></div>
+      <div class="dialog-actions"><button class="primary-button" type="submit">추가</button></div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="/app.js" defer></script>
+</body>
+</html>

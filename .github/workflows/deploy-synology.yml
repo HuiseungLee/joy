@@ -1,0 +1,56 @@
+name: Deploy to Synology NAS
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: joy-map-synology-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Deploy the latest main commit
+        shell: bash
+        env:
+          NAS_HOST: ${{ secrets.NAS_HOST }}
+          NAS_PORT: ${{ secrets.NAS_PORT }}
+          NAS_USER: ${{ secrets.NAS_USER }}
+          NAS_SSH_KEY: ${{ secrets.NAS_SSH_KEY }}
+          NAS_KNOWN_HOSTS: ${{ secrets.NAS_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+
+          test -n "$NAS_HOST"
+          test -n "$NAS_PORT"
+          test -n "$NAS_USER"
+          test -n "$NAS_SSH_KEY"
+          test -n "$NAS_KNOWN_HOSTS"
+
+          ssh_dir="$RUNNER_TEMP/joy-map-ssh"
+          install -m 700 -d "$ssh_dir"
+          printf '%s\n' "$NAS_SSH_KEY" | tr -d '\r' > "$ssh_dir/id_ed25519"
+          printf '%s\n' "$NAS_KNOWN_HOSTS" | tr -d '\r' > "$ssh_dir/known_hosts"
+          chmod 600 "$ssh_dir/id_ed25519" "$ssh_dir/known_hosts"
+
+          ssh-keygen -y -f "$ssh_dir/id_ed25519" >/dev/null
+          ssh-keygen -F "[$NAS_HOST]:$NAS_PORT" -f "$ssh_dir/known_hosts" >/dev/null
+
+          ssh -4 \
+            -i "$ssh_dir/id_ed25519" \
+            -o BatchMode=yes \
+            -o ConnectTimeout=15 \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$ssh_dir/known_hosts" \
+            -p "$NAS_PORT" \
+            "$NAS_USER@$NAS_HOST" \
+            'sudo -n /bin/sh /volume1/docker/joy-map/scripts/synology-auto-deploy.sh || { echo "Retrying once after updating the deployment script." >&2; sudo -n /bin/sh /volume1/docker/joy-map/scripts/synology-auto-deploy.sh; }'
