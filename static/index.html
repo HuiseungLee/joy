@@ -115,6 +115,19 @@
           저장할 위치를 지도에서 클릭하세요.
           <button id="cancel-pick-button" type="button">취소</button>
         </div>
+        <section id="share-confirm-card" class="share-confirm-card" aria-live="polite" hidden>
+          <div class="share-confirm-copy">
+            <span class="share-confirm-kicker">공유문 위치 확인</span>
+            <strong id="share-confirm-name"></strong>
+            <p id="share-confirm-address"></p>
+            <small>지도와 주변 위치를 확인한 뒤 장소를 추가하세요.</small>
+          </div>
+          <div class="share-confirm-actions">
+            <button id="share-retry-button" class="secondary-button" type="button">다시 찾기</button>
+            <button id="share-cancel-button" class="secondary-button" type="button">취소</button>
+            <button id="share-confirm-button" class="primary-button" type="button">이 장소 추가</button>
+          </div>
+        </section>
         <div class="map-legend" id="map-legend"></div>
       </section>
     </main>

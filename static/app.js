@@ -13,6 +13,9 @@ const state = {
   Place: null,
   hoverInfoWindow: null,
   markers: new Map(),
+  sharePreviewMarker: null,
+  pendingSharedPlace: null,
+  drawerFromShared: false,
   activePlaceId: null,
   pickMode: false,
   currentView: "saved",
@@ -48,6 +51,12 @@ const els = {
   map: $("#map"),
   mapMessage: $("#map-message"),
   shareMessageButton: $("#share-message-button"),
+  shareConfirmCard: $("#share-confirm-card"),
+  shareConfirmName: $("#share-confirm-name"),
+  shareConfirmAddress: $("#share-confirm-address"),
+  shareConfirmButton: $("#share-confirm-button"),
+  shareRetryButton: $("#share-retry-button"),
+  shareCancelButton: $("#share-cancel-button"),
   manualPinButton: $("#manual-pin-button"),
   pickBanner: $("#pick-banner"),
   cancelPickButton: $("#cancel-pick-button"),
@@ -179,6 +188,9 @@ function bindEvents() {
   });
   els.areaSearch.addEventListener("input", () => applyFilters(true));
   els.shareMessageButton.addEventListener("click", openShareDialog);
+  els.shareConfirmButton.addEventListener("click", confirmSharedPlace);
+  els.shareRetryButton.addEventListener("click", retrySharedPlaceSearch);
+  els.shareCancelButton.addEventListener("click", clearSharePreview);
   els.manualPinButton.addEventListener("click", startPickMode);
   els.cancelPickButton.addEventListener("click", stopPickMode);
   els.drawerClose.addEventListener("click", closeDrawer);
@@ -380,8 +392,11 @@ function parseSharedPlaceMessage(value) {
   return { raw, name, address, url, query: [name, address].filter(Boolean).join(" ") };
 }
 
-function openShareDialog() {
-  els.shareForm.reset();
+function openShareDialog(options = {}) {
+  if (!options.preserveMessage) {
+    clearSharePreview();
+    els.shareForm.reset();
+  }
   els.shareStatus.hidden = true;
   els.shareStatus.className = "inline-status compact-status";
   els.shareDialog.showModal();
@@ -424,12 +439,8 @@ async function handleSharedMessage(event) {
       (place.displayName || "").replace(/\s+/g, "").toLocaleLowerCase("ko") === normalizedName
     ) || matches[0];
     els.shareDialog.close();
-    openDrawerForSearch(bestMatch, {
-      label: parsed.name,
-      memo: parsed.raw,
-      kicker: "IMPORTED FROM SHARED MESSAGE",
-    });
-    toast("공유문에서 장소를 찾았습니다. 위치와 메모를 확인해 주세요.");
+    showSharedPlacePreview(bestMatch, parsed);
+    toast("지도에서 검색된 위치를 확인해 주세요.");
   } catch (error) {
     console.error(error);
     els.shareStatus.className = "inline-status compact-status";
@@ -437,6 +448,54 @@ async function handleSharedMessage(event) {
   } finally {
     submit.disabled = false;
   }
+}
+
+function showSharedPlacePreview(place, parsed) {
+  clearSharePreview();
+  const location = place.location.toJSON();
+  const pin = document.createElement("div");
+  pin.className = "map-pin preview-map-pin is-active";
+  const glyph = document.createElement("span");
+  glyph.textContent = "✓";
+  pin.appendChild(glyph);
+  state.sharePreviewMarker = new state.AdvancedMarkerElement({
+    map: state.map,
+    position: location,
+    title: `${place.displayName || parsed.name} 위치 확인`,
+    content: pin,
+    zIndex: 1000,
+  });
+  state.pendingSharedPlace = { place, parsed };
+  els.shareConfirmName.textContent = place.displayName || parsed.name;
+  els.shareConfirmAddress.textContent = place.formattedAddress || parsed.address || "주소 정보 없음";
+  els.shareConfirmCard.hidden = false;
+  focusMapOnLocation(location, 17, false);
+}
+
+function clearSharePreview() {
+  if (state.sharePreviewMarker) state.sharePreviewMarker.map = null;
+  state.sharePreviewMarker = null;
+  state.pendingSharedPlace = null;
+  els.shareConfirmCard.hidden = true;
+}
+
+function retrySharedPlaceSearch() {
+  const message = state.pendingSharedPlace?.parsed.raw || els.shareMessage.value;
+  clearSharePreview();
+  els.shareMessage.value = message;
+  openShareDialog({ preserveMessage: true });
+}
+
+function confirmSharedPlace() {
+  const pending = state.pendingSharedPlace;
+  if (!pending) return;
+  els.shareConfirmCard.hidden = true;
+  openDrawerForSearch(pending.place, {
+    label: pending.parsed.name,
+    memo: pending.parsed.raw,
+    kicker: "IMPORTED FROM SHARED MESSAGE",
+    fromShared: true,
+  });
 }
 
 function renderCategories() {
@@ -667,6 +726,18 @@ function selectPlace(place) {
   }
 }
 
+function focusMapOnLocation(location, zoom = 16, accountForDrawer = false) {
+  if (!state.map || !Number.isFinite(location?.lat) || !Number.isFinite(location?.lng)) return;
+  state.map.panTo(location);
+  state.map.setZoom(zoom);
+  if (!accountForDrawer || window.innerWidth <= 900) return;
+  window.setTimeout(() => {
+    if (!els.drawer.classList.contains("is-open")) return;
+    const drawerWidth = Math.min(els.drawer.getBoundingClientRect().width, window.innerWidth * .45);
+    state.map.panBy(drawerWidth / 2, 0);
+  }, 280);
+}
+
 function openDrawerForSearch(place, options = {}) {
   const location = place.location.toJSON();
   const region = parseAddressComponents(place.addressComponents || []);
@@ -686,7 +757,9 @@ function openDrawerForSearch(place, options = {}) {
   els.locality.value = region.locality;
   els.district.value = region.district;
   els.memo.value = options.memo || "";
+  state.drawerFromShared = Boolean(options.fromShared);
   openDrawer();
+  focusMapOnLocation(location, 17, true);
 }
 
 function openDrawerForManual(location) {
@@ -697,7 +770,9 @@ function openDrawerForManual(location) {
   els.providerPlaceId.value = `manual:${crypto.randomUUID()}`;
   els.latitude.value = location.lat;
   els.longitude.value = location.lng;
+  state.drawerFromShared = false;
   openDrawer();
+  focusMapOnLocation(location, 17, true);
   els.placeLabel.focus();
 }
 
@@ -719,7 +794,11 @@ function openDrawerForEdit(place) {
   els.district.value = place.district;
   els.memo.value = place.memo;
   els.deletePlaceButton.hidden = false;
+  state.drawerFromShared = false;
   openDrawer();
+  if (Number.isFinite(place.latitude) && Number.isFinite(place.longitude) && !place.location_cache_stale) {
+    focusMapOnLocation({ lat: place.latitude, lng: place.longitude }, 16, true);
+  }
 }
 
 function resetPlaceForm() {
@@ -745,6 +824,10 @@ function closeDrawer() {
   els.drawer.classList.remove("is-open");
   els.drawer.setAttribute("aria-hidden", "true");
   window.setTimeout(() => { els.drawerBackdrop.hidden = true; }, 220);
+  if (state.drawerFromShared) {
+    state.drawerFromShared = false;
+    clearSharePreview();
+  }
 }
 
 async function savePlace(event) {
