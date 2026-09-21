@@ -7,7 +7,7 @@
   <meta name="description" content="전 세계의 맛집과 명소를 기록하는 개인 지도">
   <title>JOY MAP</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/app.css?v=20260922-1">
+  <link rel="stylesheet" href="/app.css?v=20260922-2">
 </head>
 <body>
   <section id="login-screen" class="login-screen" aria-labelledby="login-title">
@@ -120,10 +120,14 @@
             <button id="route-clear-button" class="icon-button" type="button" aria-label="경로 선택 해제" title="경로 선택 해제">×</button>
           </div>
           <ol id="route-stop-list" class="route-stop-list"></ol>
+          <div class="route-mode-selector" role="group" aria-label="이동수단 선택">
+            <button id="route-driving-mode" type="button" aria-pressed="false">🚗 자동차</button>
+            <button id="route-transit-mode" class="is-active" type="button" aria-pressed="true">🚇 대중교통</button>
+          </div>
           <p id="route-status" class="route-status">Ctrl을 누른 채 장소를 2곳 이상 선택하세요.</p>
           <div class="route-planner-actions">
-            <button id="route-ordered-button" class="secondary-button" type="button">① 클릭 순서 경로</button>
-            <button id="route-optimal-button" class="primary-button" type="button">② 순서 무관 최적 경로</button>
+            <button id="route-ordered-button" class="secondary-button" type="button">① 클릭 순서</button>
+            <button id="route-optimal-button" class="primary-button" type="button">② 순서 무관 최적</button>
           </div>
         </section>
         <section id="share-confirm-card" class="share-confirm-card" aria-live="polite" hidden>
@@ -249,6 +253,6 @@
   </dialog>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="/app.js?v=20260922-1" defer></script>
+  <script src="/app.js?v=20260922-2" defer></script>
 </body>
 </html>

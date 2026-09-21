@@ -18,6 +18,7 @@ const state = {
   routePlaceIds: [],
   routeDisplayIds: [],
   routePolylines: [],
+  routeTravelMode: "TRANSIT",
   routeModifierPressed: false,
   lastManualOpenAt: 0,
   manualPreviewMarker: null,
@@ -69,6 +70,8 @@ const els = {
   routeCount: $("#route-count"),
   routeStopList: $("#route-stop-list"),
   routeStatus: $("#route-status"),
+  routeDrivingMode: $("#route-driving-mode"),
+  routeTransitMode: $("#route-transit-mode"),
   routeOrderedButton: $("#route-ordered-button"),
   routeOptimalButton: $("#route-optimal-button"),
   routeClearButton: $("#route-clear-button"),
@@ -202,6 +205,8 @@ function bindEvents() {
   els.shareConfirmButton.addEventListener("click", confirmSharedPlace);
   els.shareRetryButton.addEventListener("click", retrySharedPlaceSearch);
   els.shareCancelButton.addEventListener("click", clearSharePreview);
+  els.routeDrivingMode.addEventListener("click", () => setRouteTravelMode("DRIVING"));
+  els.routeTransitMode.addEventListener("click", () => setRouteTravelMode("TRANSIT"));
   els.routeOrderedButton.addEventListener("click", () => calculateSelectedRoute("ordered"));
   els.routeOptimalButton.addEventListener("click", () => calculateSelectedRoute("optimal"));
   els.routeClearButton.addEventListener("click", clearRouteSelection);
@@ -897,12 +902,29 @@ function renderRoutePlanner(resetStatus = false) {
   els.routeOptimalButton.disabled = !hasEnough || state.routePlaceIds.length > 10;
   els.routeOptimalButton.title = state.routePlaceIds.length > 10 ? "순서 무관 최적화는 최대 10곳까지 지원합니다." : "";
   if (resetStatus) {
+    const travelModeLabel = getTravelModeLabel();
     els.routeStatus.textContent = !hasEnough
       ? "Ctrl을 누른 채 장소를 한 곳 더 선택하세요."
       : state.routePlaceIds.length > 10
         ? "클릭 순서 경로는 가능하지만 순서 무관 최적화는 최대 10곳입니다."
-        : "두 방식 중 하나를 눌러 자동차 경로를 계산하세요.";
+        : `두 방식 중 하나를 눌러 ${travelModeLabel} 경로를 계산하세요.`;
   }
+}
+
+function getTravelModeLabel(travelMode = state.routeTravelMode) {
+  return travelMode === "TRANSIT" ? "대중교통" : "자동차";
+}
+
+function setRouteTravelMode(travelMode) {
+  if (!(["DRIVING", "TRANSIT"].includes(travelMode))) return;
+  state.routeTravelMode = travelMode;
+  clearRouteDrawing();
+  updateRouteSelectionVisuals();
+  els.routeDrivingMode.classList.toggle("is-active", travelMode === "DRIVING");
+  els.routeTransitMode.classList.toggle("is-active", travelMode === "TRANSIT");
+  els.routeDrivingMode.setAttribute("aria-pressed", String(travelMode === "DRIVING"));
+  els.routeTransitMode.setAttribute("aria-pressed", String(travelMode === "TRANSIT"));
+  renderRoutePlanner(true);
 }
 
 function clearRoutePolylines() {
@@ -959,12 +981,18 @@ function describeRouteError(error) {
     : "경로를 계산하지 못했습니다. Routes API 활성화와 API 키 제한을 확인해 주세요.";
 }
 
-async function findOptimalOpenRoute(places) {
+function noRouteError(travelMode, allPlaces = false) {
+  const error = new Error(`선택한 장소를 ${allPlaces ? "모두 " : ""}연결하는 ${getTravelModeLabel(travelMode)} 경로가 없습니다.`);
+  error.code = "NO_ROUTE";
+  return error;
+}
+
+async function findOptimalOpenRoute(places, travelMode) {
   const locations = places.map(routeLocation);
   const { matrix } = await state.RouteMatrix.computeRouteMatrix({
     origins: locations,
     destinations: locations,
-    travelMode: "DRIVING",
+    travelMode,
     fields: ["durationMillis", "condition"],
   });
   const size = places.length;
@@ -1003,7 +1031,7 @@ async function findOptimalOpenRoute(places) {
       last = candidate;
     }
   }
-  if (last < 0 || !Number.isFinite(lowest)) throw new Error("선택한 장소를 모두 연결하는 자동차 경로가 없습니다.");
+  if (last < 0 || !Number.isFinite(lowest)) throw noRouteError(travelMode, true);
   const order = [];
   let mask = fullMask;
   while (last >= 0) {
@@ -1028,26 +1056,63 @@ function formatRouteDuration(milliseconds) {
   return hours ? `${hours}시간 ${minutes ? `${minutes}분` : ""}`.trim() : `${minutes}분`;
 }
 
-async function drawDrivingRoute(places) {
-  const locations = places.map(routeLocation);
-  const request = {
-    origin: locations[0],
-    destination: locations.at(-1),
-    travelMode: "DRIVING",
+async function computeRouteSegment(origin, destination, travelMode) {
+  const { routes = [] } = await state.Route.computeRoutes({
+    origin,
+    destination,
+    travelMode,
     fields: ["path", "viewport", "distanceMeters", "durationMillis"],
-  };
-  if (locations.length > 2) request.intermediates = locations.slice(1, -1).map((location) => ({ location }));
-  const { routes = [] } = await state.Route.computeRoutes(request);
-  if (!routes.length) throw new Error("선택한 장소를 연결하는 자동차 경로가 없습니다.");
-  const route = routes[0];
+  });
+  if (!routes.length) throw noRouteError(travelMode);
+  return routes[0];
+}
+
+async function drawRoute(places, travelMode) {
+  const locations = places.map(routeLocation);
+  let routes;
+  if (travelMode === "TRANSIT") {
+    routes = [];
+    for (let index = 0; index < locations.length - 1; index += 1) {
+      routes.push(await computeRouteSegment(locations[index], locations[index + 1], travelMode));
+    }
+  } else {
+    const request = {
+      origin: locations[0],
+      destination: locations.at(-1),
+      travelMode,
+      fields: ["path", "viewport", "distanceMeters", "durationMillis"],
+    };
+    if (locations.length > 2) request.intermediates = locations.slice(1, -1).map((location) => ({ location }));
+    const { routes: computedRoutes = [] } = await state.Route.computeRoutes(request);
+    if (!computedRoutes.length) throw noRouteError(travelMode);
+    routes = [computedRoutes[0]];
+  }
   clearRoutePolylines();
-  state.routePolylines = route.createPolylines();
+  const bounds = new google.maps.LatLngBounds();
+  let pathPointCount = 0;
+  let distanceMeters = 0;
+  let durationMillis = 0;
+  state.routePolylines = routes.flatMap((route) => {
+    distanceMeters += Number(route.distanceMeters) || 0;
+    durationMillis += Number(route.durationMillis) || 0;
+    route.path?.forEach((point) => {
+      bounds.extend(point);
+      pathPointCount += 1;
+    });
+    return route.createPolylines();
+  });
   state.routePolylines.forEach((polyline) => {
-    polyline.setOptions({ strokeColor: "#2d6cdf", strokeOpacity: .9, strokeWeight: 6, zIndex: 20 });
+    polyline.setOptions({
+      strokeColor: travelMode === "TRANSIT" ? "#7c4dcc" : "#2d6cdf",
+      strokeOpacity: .9,
+      strokeWeight: 6,
+      zIndex: 20,
+    });
     polyline.setMap(state.map);
   });
-  if (route.viewport) state.map.fitBounds(route.viewport, 70);
-  return route;
+  if (pathPointCount) state.map.fitBounds(bounds, 70);
+  else if (routes[0]?.viewport) state.map.fitBounds(routes[0].viewport, 70);
+  return { distanceMeters, durationMillis };
 }
 
 async function calculateSelectedRoute(mode) {
@@ -1062,27 +1127,36 @@ async function calculateSelectedRoute(mode) {
   }
   els.routeOrderedButton.disabled = true;
   els.routeOptimalButton.disabled = true;
+  els.routeDrivingMode.disabled = true;
+  els.routeTransitMode.disabled = true;
   els.routeStatus.classList.add("is-loading");
-  els.routeStatus.textContent = mode === "optimal" ? "모든 장소 사이의 이동시간을 비교하는 중…" : "선택한 순서로 경로를 계산하는 중…";
+  const travelMode = state.routeTravelMode;
+  const travelModeLabel = getTravelModeLabel(travelMode);
+  els.routeStatus.textContent = mode === "optimal"
+    ? `${travelModeLabel} 이동시간을 비교하는 중…`
+    : `선택한 순서로 ${travelModeLabel} 경로를 계산하는 중…`;
   try {
     await ensureRoutesLibrary();
-    const ordered = mode === "optimal" ? await findOptimalOpenRoute(selected) : selected;
-    const route = await drawDrivingRoute(ordered);
+    const ordered = mode === "optimal" ? await findOptimalOpenRoute(selected, travelMode) : selected;
+    const route = await drawRoute(ordered, travelMode);
     state.routeDisplayIds = ordered.map((place) => place.id);
     updateRouteSelectionVisuals();
     renderRoutePlanner(false);
     const label = mode === "optimal" ? "순서 무관 최적 경로" : "클릭 순서 경로";
-    els.routeStatus.textContent = `${label} · ${formatRouteDistance(route.distanceMeters)} · 약 ${formatRouteDuration(route.durationMillis)}`;
-    toast(`${label}를 지도에 표시했습니다.`);
+    els.routeStatus.textContent = `${travelModeLabel} · ${label} · ${formatRouteDistance(route.distanceMeters)} · 약 ${formatRouteDuration(route.durationMillis)}`;
+    toast(`${travelModeLabel} ${label}를 지도에 표시했습니다.`);
   } catch (error) {
     console.error(error);
-    const message = /모두 연결|자동차 경로/.test(error.message)
-      ? error.message
-      : describeRouteError(error);
+    let message = error.code === "NO_ROUTE" ? error.message : describeRouteError(error);
+    if (error.code === "NO_ROUTE" && travelMode === "DRIVING") {
+      message += " 국내 장소는 자동차 경로가 제공되지 않을 수 있으니 대중교통을 선택해 보세요.";
+    }
     els.routeStatus.textContent = message;
     toast(message, true);
   } finally {
     els.routeStatus.classList.remove("is-loading");
+    els.routeDrivingMode.disabled = false;
+    els.routeTransitMode.disabled = false;
     const hasEnough = state.routePlaceIds.length >= 2;
     els.routeOrderedButton.disabled = !hasEnough;
     els.routeOptimalButton.disabled = !hasEnough || state.routePlaceIds.length > 10;
