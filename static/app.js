@@ -20,6 +20,7 @@ const state = {
   routePolylines: [],
   routeModifierPressed: false,
   lastManualOpenAt: 0,
+  manualPreviewMarker: null,
   sharePreviewMarker: null,
   pendingSharedPlace: null,
   drawerFromShared: false,
@@ -270,7 +271,7 @@ function loadGoogleMaps(apiKey) {
       reject(new Error("Google 지도 인증에 실패했습니다."));
     };
     const script = document.createElement("script");
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&v=weekly&libraries=places,marker&language=ko&callback=__joyMapReady`;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&v=weekly&libraries=places,marker,routes&language=ko&callback=__joyMapReady`;
     script.async = true;
     script.onerror = () => reject(new Error("Google 지도 스크립트를 불러오지 못했습니다."));
     document.head.appendChild(script);
@@ -890,7 +891,33 @@ async function ensureRoutesLibrary() {
 }
 
 function routeLocation(place) {
+  if (place.provider === "google" && place.provider_place_id && state.Place) {
+    return new state.Place({ id: place.provider_place_id });
+  }
   return { lat: place.latitude, lng: place.longitude };
+}
+
+function describeRouteError(error) {
+  const details = [error?.code, error?.status, error?.message]
+    .filter(Boolean)
+    .join(" · ")
+    .replace(/key=[^&\s]+/gi, "key=***")
+    .slice(0, 240);
+  if (/REQUEST_DENIED|PERMISSION_DENIED|not authorized|API_KEY_SERVICE_BLOCKED/i.test(details)) {
+    return "Routes API 권한이 거부되었습니다. API 키 제한에 Routes API가 포함됐는지 확인해 주세요.";
+  }
+  if (/BILLING|billing/i.test(details)) {
+    return "Routes API 결제 계정이 활성화되지 않았습니다. Google Cloud 결제 연결 상태를 확인해 주세요.";
+  }
+  if (/OVER_QUERY_LIMIT|RESOURCE_EXHAUSTED|quota/i.test(details)) {
+    return "Routes API 사용 한도에 도달했습니다. Google Cloud 할당량을 확인해 주세요.";
+  }
+  if (/network|fetch|Failed to fetch/i.test(details)) {
+    return "Routes API에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.";
+  }
+  return details
+    ? `경로를 계산하지 못했습니다. Google 오류: ${details}`
+    : "경로를 계산하지 못했습니다. Routes API 활성화와 API 키 제한을 확인해 주세요.";
 }
 
 async function findOptimalOpenRoute(places) {
@@ -1012,7 +1039,7 @@ async function calculateSelectedRoute(mode) {
     console.error(error);
     const message = /모두 연결|자동차 경로/.test(error.message)
       ? error.message
-      : "경로를 계산하지 못했습니다. Google Cloud에서 Routes API를 활성화하고 API 키 제한에 추가해 주세요.";
+      : describeRouteError(error);
     els.routeStatus.textContent = message;
     toast(message, true);
   } finally {
@@ -1078,9 +1105,32 @@ function openDrawerForManual(location) {
   els.latitude.value = location.lat;
   els.longitude.value = location.lng;
   state.drawerFromShared = false;
+  showManualPreview(location);
   openDrawer();
   focusMapOnLocation(location, 17, true);
   els.placeLabel.focus();
+}
+
+function showManualPreview(location) {
+  clearManualPreview();
+  if (!state.map || !state.AdvancedMarkerElement) return;
+  const pin = document.createElement("div");
+  pin.className = "map-pin manual-preview-pin is-active";
+  const glyph = document.createElement("span");
+  glyph.textContent = "+";
+  pin.appendChild(glyph);
+  state.manualPreviewMarker = new state.AdvancedMarkerElement({
+    map: state.map,
+    position: location,
+    title: "직접 지정한 위치",
+    content: pin,
+    zIndex: 1001,
+  });
+}
+
+function clearManualPreview() {
+  if (state.manualPreviewMarker) state.manualPreviewMarker.map = null;
+  state.manualPreviewMarker = null;
 }
 
 function openDrawerForEdit(place) {
@@ -1109,6 +1159,7 @@ function openDrawerForEdit(place) {
 }
 
 function resetPlaceForm() {
+  clearManualPreview();
   els.placeForm.reset();
   els.placeId.value = "";
   els.provider.value = "google";
@@ -1131,6 +1182,7 @@ function closeDrawer() {
   els.drawer.classList.remove("is-open");
   els.drawer.setAttribute("aria-hidden", "true");
   window.setTimeout(() => { els.drawerBackdrop.hidden = true; }, 220);
+  clearManualPreview();
   if (state.drawerFromShared) {
     state.drawerFromShared = false;
     clearSharePreview();
