@@ -47,6 +47,7 @@ const els = {
   categoryManageButton: $("#category-manage-button"),
   map: $("#map"),
   mapMessage: $("#map-message"),
+  shareMessageButton: $("#share-message-button"),
   manualPinButton: $("#manual-pin-button"),
   pickBanner: $("#pick-banner"),
   cancelPickButton: $("#cancel-pick-button"),
@@ -75,6 +76,12 @@ const els = {
   memo: $("#memo"),
   deletePlaceButton: $("#delete-place-button"),
   cancelPlaceButton: $("#cancel-place-button"),
+  shareDialog: $("#share-dialog"),
+  shareForm: $("#share-form"),
+  shareDialogClose: $("#share-dialog-close"),
+  shareDialogCancel: $("#share-dialog-cancel"),
+  shareMessage: $("#share-message"),
+  shareStatus: $("#share-status"),
   categoryDialog: $("#category-dialog"),
   categoryForm: $("#category-form"),
   categoryDialogClose: $("#category-dialog-close"),
@@ -171,12 +178,16 @@ function bindEvents() {
     element.addEventListener("change", () => applyFilters(true));
   });
   els.areaSearch.addEventListener("input", () => applyFilters(true));
+  els.shareMessageButton.addEventListener("click", openShareDialog);
   els.manualPinButton.addEventListener("click", startPickMode);
   els.cancelPickButton.addEventListener("click", stopPickMode);
   els.drawerClose.addEventListener("click", closeDrawer);
   els.drawerBackdrop.addEventListener("click", closeDrawer);
   els.cancelPlaceButton.addEventListener("click", closeDrawer);
   els.placeForm.addEventListener("submit", savePlace);
+  els.shareForm.addEventListener("submit", handleSharedMessage);
+  els.shareDialogClose.addEventListener("click", () => els.shareDialog.close());
+  els.shareDialogCancel.addEventListener("click", () => els.shareDialog.close());
   els.deletePlaceButton.addEventListener("click", deleteCurrentPlace);
   els.categoryManageButton.addEventListener("click", openCategoryDialog);
   els.categoryDialogClose.addEventListener("click", () => els.categoryDialog.close());
@@ -243,7 +254,7 @@ async function initializeMap() {
     streetViewControl: false,
     fullscreenControl: true,
     clickableIcons: true,
-    gestureHandling: "cooperative",
+    gestureHandling: "greedy",
   });
   state.hoverInfoWindow = new google.maps.InfoWindow({ disableAutoPan: true });
   state.map.addListener("click", (event) => {
@@ -343,6 +354,87 @@ function parseAddressComponents(components = []) {
     locality,
     district,
   };
+}
+
+function parseSharedPlaceMessage(value) {
+  const raw = value.trim();
+  const lines = raw.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const isDivider = (line) => /^[-=_*]{3,}$/.test(line.replace(/\\/g, ""));
+  const isProvider = (line) => /^\[[^\]]*(?:지도|map)[^\]]*\]$/i.test(line) || /^(?:네이버지도|카카오맵|google maps)$/i.test(line);
+  const isUrl = (line) => /^https?:\/\//i.test(line);
+  const contentLines = lines.filter((line) => !isDivider(line) && !isProvider(line) && !isUrl(line));
+  const name = contentLines[0] || "";
+  const addressCandidates = contentLines.slice(1);
+  const addressScore = (line) => {
+    let score = Math.min(line.length, 120) / 120;
+    if (/[가-힣]+(?:특별시|광역시|도|시|군|구)/.test(line)) score += 3;
+    if (/(?:대로|로|길)\s*\d/.test(line)) score += 4;
+    if (/\d/.test(line)) score += 1;
+    if (line.includes(",")) score += 1;
+    return score;
+  };
+  const address = addressCandidates.sort((a, b) => addressScore(b) - addressScore(a))[0] || "";
+  const url = lines.find(isUrl) || "";
+  return { raw, name, address, url, query: [name, address].filter(Boolean).join(" ") };
+}
+
+function openShareDialog() {
+  els.shareForm.reset();
+  els.shareStatus.hidden = true;
+  els.shareStatus.className = "inline-status compact-status";
+  els.shareDialog.showModal();
+  els.shareMessage.focus();
+}
+
+async function handleSharedMessage(event) {
+  event.preventDefault();
+  if (!state.Place) {
+    els.shareStatus.hidden = false;
+    els.shareStatus.textContent = "Google 지도 API 설정을 먼저 완료해 주세요.";
+    return;
+  }
+  const parsed = parseSharedPlaceMessage(els.shareMessage.value);
+  if (!parsed.name) {
+    els.shareStatus.hidden = false;
+    els.shareStatus.textContent = "링크만 붙이지 말고 장소명과 주소가 포함된 공유문 전체를 붙여넣어 주세요.";
+    return;
+  }
+  const submit = els.shareForm.querySelector("button[type='submit']");
+  submit.disabled = true;
+  els.shareStatus.hidden = false;
+  els.shareStatus.className = "inline-status compact-status is-loading";
+  els.shareStatus.textContent = `‘${parsed.name}’ 위치를 찾는 중…`;
+  try {
+    const request = {
+      textQuery: parsed.query,
+      fields: ["id", "displayName", "formattedAddress", "location", "googleMapsURI", "addressComponents"],
+      maxResultCount: 5,
+    };
+    const { places = [] } = await state.Place.searchByText(request);
+    const matches = places.filter((place) => place.id && place.location);
+    if (!matches.length) {
+      els.shareStatus.className = "inline-status compact-status";
+      els.shareStatus.textContent = "일치하는 장소를 찾지 못했습니다. 장소명과 도로명 주소를 확인해 주세요.";
+      return;
+    }
+    const normalizedName = parsed.name.replace(/\s+/g, "").toLocaleLowerCase("ko");
+    const bestMatch = matches.find((place) =>
+      (place.displayName || "").replace(/\s+/g, "").toLocaleLowerCase("ko") === normalizedName
+    ) || matches[0];
+    els.shareDialog.close();
+    openDrawerForSearch(bestMatch, {
+      label: parsed.name,
+      memo: parsed.raw,
+      kicker: "IMPORTED FROM SHARED MESSAGE",
+    });
+    toast("공유문에서 장소를 찾았습니다. 위치와 메모를 확인해 주세요.");
+  } catch (error) {
+    console.error(error);
+    els.shareStatus.className = "inline-status compact-status";
+    els.shareStatus.textContent = "장소를 찾지 못했습니다. 잠시 후 다시 시도해 주세요.";
+  } finally {
+    submit.disabled = false;
+  }
 }
 
 function renderCategories() {
@@ -573,11 +665,11 @@ function selectPlace(place) {
   }
 }
 
-function openDrawerForSearch(place) {
+function openDrawerForSearch(place, options = {}) {
   const location = place.location.toJSON();
   const region = parseAddressComponents(place.addressComponents || []);
   resetPlaceForm();
-  els.drawerKicker.textContent = "SAVE FROM GOOGLE MAPS";
+  els.drawerKicker.textContent = options.kicker || "SAVE FROM GOOGLE MAPS";
   els.drawerTitle.textContent = "장소 저장";
   els.sourcePreview.hidden = false;
   els.sourceName.textContent = place.displayName || "Google 장소";
@@ -586,11 +678,12 @@ function openDrawerForSearch(place) {
   els.providerPlaceId.value = place.id;
   els.latitude.value = location.lat;
   els.longitude.value = location.lng;
-  els.placeLabel.value = place.displayName || "";
+  els.placeLabel.value = options.label || place.displayName || "";
   els.countryCode.value = region.country_code;
   els.region.value = region.region;
   els.locality.value = region.locality;
   els.district.value = region.district;
+  els.memo.value = options.memo || "";
   openDrawer();
 }
 

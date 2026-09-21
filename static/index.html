@@ -107,7 +107,10 @@
           <strong>Google 지도 설정이 필요합니다</strong>
           <span>환경변수에 API 키를 등록한 뒤 다시 시작해 주세요.</span>
         </div>
-        <button id="manual-pin-button" class="map-action" type="button">＋ 지도에서 직접 지정</button>
+        <div class="map-actions">
+          <button id="share-message-button" class="map-action secondary-map-action" type="button">⌁ 공유문 붙여넣기</button>
+          <button id="manual-pin-button" class="map-action" type="button">＋ 지도에서 직접 지정</button>
+        </div>
         <div id="pick-banner" class="pick-banner" hidden>
           저장할 위치를 지도에서 클릭하세요.
           <button id="cancel-pick-button" type="button">취소</button>
@@ -185,6 +188,28 @@
       </div>
     </form>
   </aside>
+
+  <dialog id="share-dialog" class="dialog share-dialog">
+    <form id="share-form">
+      <div class="dialog-header">
+        <div>
+          <p class="eyebrow">PASTE A SHARED PLACE</p>
+          <h2>공유문으로 장소 찾기</h2>
+        </div>
+        <button id="share-dialog-close" class="icon-button" type="button" aria-label="닫기">×</button>
+      </div>
+      <label class="field">
+        <span>카카오톡·지도 공유문</span>
+        <textarea id="share-message" maxlength="5000" rows="9" required placeholder="[네이버지도]&#10;유성왕수산&#10;대전 유성구 대학로 35 유성왕수산&#10;https://naver.me/..."></textarea>
+      </label>
+      <p class="policy-note">장소명과 주소를 추출해 Google 지도에서 가장 가까운 결과를 찾습니다. 저장하기 전에 검색 결과를 확인해 주세요.</p>
+      <p id="share-status" class="inline-status compact-status" hidden></p>
+      <div class="dialog-actions dialog-actions-split">
+        <button id="share-dialog-cancel" class="secondary-button" type="button">취소</button>
+        <button class="primary-button" type="submit">장소 찾기</button>
+      </div>
+    </form>
+  </dialog>
 
   <dialog id="category-dialog" class="dialog">
     <form id="category-form" method="dialog">

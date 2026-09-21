@@ -135,7 +135,10 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .map-message { position: absolute; z-index: 2; left: 50%; top: 50%; width: min(90%, 390px); transform: translate(-50%, -50%); border: 1px solid var(--line); border-radius: 15px; background: white; padding: 24px; box-shadow: var(--shadow); text-align: center; }
 .map-message strong, .map-message span { display: block; }
 .map-message span { margin-top: 7px; color: var(--ink-soft); font-size: .87rem; }
-.map-action { position: absolute; z-index: 2; top: 18px; right: 18px; border: 1px solid var(--ink); border-radius: 9px; background: var(--ink); color: white; padding: 10px 14px; box-shadow: 0 8px 22px rgba(19,34,56,.2); font-weight: 700; }
+.map-actions { position: absolute; z-index: 2; top: 18px; right: 18px; display: grid; justify-items: end; gap: 8px; }
+.map-action { border: 1px solid var(--ink); border-radius: 9px; background: var(--ink); color: white; padding: 10px 14px; box-shadow: 0 8px 22px rgba(19,34,56,.2); font-weight: 700; }
+.secondary-map-action { border-color: rgba(19,34,56,.24); background: rgba(255,255,255,.96); color: var(--ink); }
+.secondary-map-action:hover { background: white; }
 .pick-banner { position: absolute; z-index: 4; left: 50%; top: 18px; transform: translateX(-50%); border-radius: 10px; background: var(--accent); color: white; padding: 10px 12px 10px 16px; box-shadow: var(--shadow); font-weight: 700; white-space: nowrap; }
 .pick-banner button { margin-left: 12px; border: 1px solid rgba(255,255,255,.6); border-radius: 7px; background: transparent; color: white; }
 .map-legend { position: absolute; z-index: 2; right: 18px; bottom: 24px; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 7px; max-width: min(560px, 80%); }
@@ -182,6 +185,10 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .dialog { width: min(440px, calc(100% - 28px)); border: 0; border-radius: 16px; background: var(--panel); padding: 0; box-shadow: var(--shadow); color: var(--ink); }
 .dialog::backdrop { background: rgba(19,34,56,.35); backdrop-filter: blur(3px); }
 .dialog form { padding: 24px; }
+.share-dialog { width: min(560px, calc(100% - 28px)); }
+.share-dialog textarea { min-height: 190px; }
+.compact-status { margin: 10px 0 0; }
+.dialog-actions-split { justify-content: space-between; gap: 10px; }
 .color-field input { min-height: 48px; padding: 5px; }
 .category-list { display: grid; gap: 7px; margin: 18px 0 8px; }
 .category-row { display: flex; align-items: center; gap: 9px; border-top: 1px solid var(--line); padding: 10px 2px 2px; font-size: .85rem; }
@@ -223,7 +230,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .search-block { padding: 18px 16px 14px; }
   .view-tabs { padding: 0 16px; }
   .map-stage { height: 42dvh; min-height: 280px; }
-  .map-action { top: 12px; right: 12px; font-size: .8rem; padding: 9px 11px; }
+  .map-actions { top: 12px; right: 12px; }
+  .map-action { font-size: .8rem; padding: 9px 11px; }
   .pick-banner { top: 12px; max-width: calc(100% - 24px); white-space: normal; text-align: center; font-size: .78rem; }
   .drawer form { padding: 20px; }
   .drawer-actions { bottom: -20px; margin: 14px -20px -20px; padding: 14px 20px 18px; }
