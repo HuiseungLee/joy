@@ -46,6 +46,7 @@ API 키는 브라우저에 전달되는 공개 식별자입니다. 비밀로 숨
    - `SECRET_KEY`: `openssl rand -hex 32` 결과
    - `GOOGLE_MAPS_API_KEY`: 제한을 설정한 브라우저 키
    - `GOOGLE_MAP_ID`: 생성한 Map ID
+   - `JOY_MAP_UID`, `JOY_MAP_GID`: NAS 배포 계정에서 `id`를 실행해 확인한 숫자 값
 3. SSH 터미널에서 해당 폴더로 이동해 실행합니다.
 
 ```bash

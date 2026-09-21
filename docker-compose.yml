@@ -3,6 +3,7 @@ services:
     build: .
     container_name: joy-map
     restart: unless-stopped
+    user: "${JOY_MAP_UID:-1026}:${JOY_MAP_GID:-100}"
     env_file:
       - .env
     ports:
