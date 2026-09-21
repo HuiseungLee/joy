@@ -239,7 +239,7 @@ function loadGoogleMaps(apiKey) {
 }
 
 async function initializeMap() {
-  const [{ Map }, { AdvancedMarkerElement }, { Place }] = await Promise.all([
+  const [{ Map, RenderingType }, { AdvancedMarkerElement }, { Place }] = await Promise.all([
     google.maps.importLibrary("maps"),
     google.maps.importLibrary("marker"),
     google.maps.importLibrary("places"),
@@ -250,6 +250,8 @@ async function initializeMap() {
     center: { lat: 20, lng: 0 },
     zoom: 2,
     mapId: state.config.map_id || "DEMO_MAP_ID",
+    mapTypeId: "roadmap",
+    renderingType: RenderingType.RASTER,
     mapTypeControl: false,
     streetViewControl: false,
     fullscreenControl: true,
