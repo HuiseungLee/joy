@@ -1,4 +1,6 @@
 .env
+.env.backup-*
+.env.configure-*
 data/*
 !data/.gitkeep
 __pycache__/

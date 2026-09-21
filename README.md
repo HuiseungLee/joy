@@ -149,6 +149,13 @@ chmod 700 data
 
 `.env`의 로그인 비밀번호, 세션 키, Google Maps 키와 Map ID를 입력한 뒤 최초 한 번 실행합니다.
 
+Synology의 `vi` 편집기가 익숙하지 않다면 다음 대화형 도구를 사용합니다. 입력한 API 키와 비밀번호는 화면에 표시되지 않으며, 기존 `.env`는 권한이 제한된 백업 파일로 보관됩니다.
+
+```sh
+cd /volume1/docker/joy-map
+sh scripts/configure-secrets.sh
+```
+
 ```bash
 docker compose up -d --build
 curl -fsS http://127.0.0.1:7330/api/health
