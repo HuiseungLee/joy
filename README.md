@@ -95,6 +95,13 @@ Google Maps Platform의 공식 지원표에서는 대한민국의 자동차 길�
 
 카카오 키는 [카카오디벨로퍼스](https://developers.kakao.com/)에서 앱을 만든 뒤 **앱 → 플랫폼 키 → REST API 키**에서 발급합니다. 가능하면 NAS의 공인 IP만 호출 허용 IP로 등록하고 `.env`에 `KAKAO_REST_API_KEY=발급한키`를 추가한 뒤 컨테이너를 다시 배포하세요. 카카오 공식 무료 쿼터는 자동차 길찾기 10,000회, 다중 목적지 길찾기 1,000회이며 정책은 변경될 수 있습니다.
 
+NAS에서 `vi`를 사용하지 않고 카카오 키만 등록하려면 SSH에서 다음 명령을 실행하세요. 키 입력은 화면에 표시되지 않으며, 기존 `.env`는 자동 백업됩니다.
+
+```bash
+cd /volume1/docker/joy-map
+sh scripts/set-kakao-key.sh
+```
+
 ## 데이터와 백업
 
 데이터는 `data/joy-map.db`에 저장됩니다. Google 정책을 고려해 다음만 영구 저장합니다.
