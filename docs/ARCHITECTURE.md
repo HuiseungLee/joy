@@ -20,6 +20,7 @@
 | `provider`, `provider_place_id` | Google Place ID 또는 직접 지정 좌표 ID |
 | `label`, `memo` | 사용자가 확인·작성한 개인 데이터 |
 | `country_code`, `region`, `locality`, `district` | 전 세계 지역 필터용 사용자 태그 |
+| `planned_month` | 1~12월 방문 예정 분류. 비어 있으면 월 미정 |
 | `latitude`, `longitude`, `location_cached_at` | 마커용 29일 좌표 캐시 |
 | `category_id` | 확장 가능한 카테고리 참조 |
 

@@ -36,18 +36,25 @@ class JoyMapDatabaseTests(unittest.TestCase):
             "region": "서울특별시",
             "locality": "서울",
             "district": "종로구",
+            "planned_month": 5,
             "memo": "다시 가기",
             "latitude": 37.57,
             "longitude": 126.98,
         })
         self.assertEqual(created["label"], "테스트 장소")
+        self.assertEqual(created["planned_month"], 5)
         self.assertFalse(created["location_cache_stale"])
 
         filtered = app.list_places({"country_code": ["KR"], "district": ["종로구"]})
         self.assertEqual(len(filtered), 1)
+        self.assertEqual(len(app.list_places({"scope": ["domestic"]})), 1)
+        self.assertEqual(len(app.list_places({"planned_month": ["5"]})), 1)
+        self.assertEqual(len(app.list_places({"area_q": ["종로"]})), 1)
+        self.assertEqual(app.list_places({"scope": ["international"]}), [])
 
-        updated = app.update_place(created["id"], {"memo": "수정한 메모"})
+        updated = app.update_place(created["id"], {"memo": "수정한 메모", "planned_month": 11})
         self.assertEqual(updated["memo"], "수정한 메모")
+        self.assertEqual(updated["planned_month"], 11)
 
         app.delete_place(created["id"])
         self.assertEqual(app.list_places({}), [])
@@ -66,6 +73,18 @@ class JoyMapDatabaseTests(unittest.TestCase):
         with self.assertRaises(app.ApiError) as caught:
             app.create_place(payload)
         self.assertEqual(caught.exception.status, 409)
+
+    def test_planned_month_validation(self):
+        category_id = app.list_categories()[0]["id"]
+        with self.assertRaises(app.ApiError) as caught:
+            app.create_place({
+                "provider": "manual",
+                "provider_place_id": "manual:bad-month",
+                "label": "잘못된 월",
+                "category_id": category_id,
+                "planned_month": 13,
+            })
+        self.assertEqual(caught.exception.status, 400)
 
     def test_signed_session_expiry_and_tampering(self):
         token = app.make_session_token("tester")

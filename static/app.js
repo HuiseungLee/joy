@@ -11,6 +11,7 @@ const state = {
   map: null,
   AdvancedMarkerElement: null,
   Place: null,
+  hoverInfoWindow: null,
   markers: new Map(),
   activePlaceId: null,
   pickMode: false,
@@ -38,8 +39,10 @@ const els = {
   searchResults: $("#search-results"),
   searchStatus: $("#search-status"),
   categoryFilter: $("#category-filter"),
+  scopeFilter: $("#scope-filter"),
+  monthFilter: $("#month-filter"),
   countryFilter: $("#country-filter"),
-  localityFilter: $("#locality-filter"),
+  areaSearch: $("#area-search"),
   filteredCount: $("#filtered-count"),
   categoryManageButton: $("#category-manage-button"),
   map: $("#map"),
@@ -64,6 +67,7 @@ const els = {
   longitude: $("#longitude"),
   placeLabel: $("#place-label"),
   placeCategory: $("#place-category"),
+  plannedMonth: $("#planned-month"),
   countryCode: $("#country-code"),
   region: $("#region"),
   locality: $("#locality"),
@@ -163,9 +167,10 @@ function bindEvents() {
   els.searchForm.addEventListener("submit", handleSearch);
   els.savedTab.addEventListener("click", () => setView("saved"));
   els.searchTab.addEventListener("click", () => setView("search"));
-  [els.categoryFilter, els.countryFilter, els.localityFilter].forEach((element) => {
+  [els.categoryFilter, els.scopeFilter, els.monthFilter, els.countryFilter].forEach((element) => {
     element.addEventListener("change", () => applyFilters(true));
   });
+  els.areaSearch.addEventListener("input", () => applyFilters(true));
   els.manualPinButton.addEventListener("click", startPickMode);
   els.cancelPickButton.addEventListener("click", stopPickMode);
   els.drawerClose.addEventListener("click", closeDrawer);
@@ -240,6 +245,7 @@ async function initializeMap() {
     clickableIcons: true,
     gestureHandling: "cooperative",
   });
+  state.hoverInfoWindow = new google.maps.InfoWindow({ disableAutoPan: true });
   state.map.addListener("click", (event) => {
     if (!state.pickMode || !event.latLng) return;
     const location = event.latLng.toJSON();
@@ -390,30 +396,40 @@ function getAreaTag(place) {
   return place.district || place.locality || "";
 }
 
+function getPlaceScope(place) {
+  if (place.country_code === "KR") return "domestic";
+  return place.country_code ? "international" : "unknown";
+}
+
+function getAreaSearchText(place) {
+  return [place.region, place.locality, place.district].filter(Boolean).join(" ").toLocaleLowerCase("ko");
+}
+
 function renderFilters() {
   const currentCountry = els.countryFilter.value;
-  const currentArea = els.localityFilter.value;
-  const countries = [...new Set(state.places.map((place) => place.country_code).filter(Boolean))].sort();
+  const scope = els.scopeFilter.value;
+  const countries = [...new Set(state.places
+    .filter((place) => !scope || getPlaceScope(place) === scope)
+    .map((place) => place.country_code).filter(Boolean))].sort();
   els.countryFilter.replaceChildren(new Option("모든 국가", ""));
   countries.forEach((country) => els.countryFilter.appendChild(new Option(country, country)));
   if (countries.includes(currentCountry)) els.countryFilter.value = currentCountry;
-  const areas = [...new Set(state.places
-    .filter((place) => !els.countryFilter.value || place.country_code === els.countryFilter.value)
-    .map(getAreaTag).filter(Boolean))].sort((a, b) => a.localeCompare(b, "ko"));
-  els.localityFilter.replaceChildren(new Option("모든 도시·시군구", ""));
-  areas.forEach((area) => els.localityFilter.appendChild(new Option(area, area)));
-  if (areas.includes(currentArea)) els.localityFilter.value = currentArea;
+  else els.countryFilter.value = "";
 }
 
 function applyFilters(fitMap = true) {
-  if (document.activeElement === els.countryFilter) renderFilters();
+  if (document.activeElement === els.scopeFilter) renderFilters();
   const category = els.categoryFilter.value;
+  const scope = els.scopeFilter.value;
+  const month = els.monthFilter.value;
   const country = els.countryFilter.value;
-  const area = els.localityFilter.value;
+  const areaQuery = els.areaSearch.value.trim().toLocaleLowerCase("ko");
   state.filteredPlaces = state.places.filter((place) =>
     (!category || String(place.category_id) === category) &&
+    (!scope || getPlaceScope(place) === scope) &&
+    (!month || String(place.planned_month || "") === month) &&
     (!country || place.country_code === country) &&
-    (!area || getAreaTag(place) === area)
+    (!areaQuery || getAreaSearchText(place).includes(areaQuery))
   );
   renderSavedList();
   if (state.map) renderMarkers(fitMap);
@@ -434,7 +450,27 @@ function renderSavedList() {
     els.savedList.appendChild(empty);
     return;
   }
-  state.filteredPlaces.forEach((place) => els.savedList.appendChild(savedPlaceCard(place)));
+  const groups = new Map();
+  state.filteredPlaces.forEach((place) => {
+    const key = place.planned_month || 0;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(place);
+  });
+  const orderedMonths = [...groups.keys()].sort((a, b) => {
+    if (a === 0) return 1;
+    if (b === 0) return -1;
+    return a - b;
+  });
+  orderedMonths.forEach((month) => {
+    const section = document.createElement("section");
+    section.className = "month-group";
+    const heading = document.createElement("h3");
+    heading.className = "month-heading";
+    heading.textContent = month ? `${month}월에 갈 곳` : "월 미정";
+    section.appendChild(heading);
+    groups.get(month).forEach((place) => section.appendChild(savedPlaceCard(place)));
+    els.savedList.appendChild(section);
+  });
 }
 
 function savedPlaceCard(place) {
@@ -452,7 +488,17 @@ function savedPlaceCard(place) {
   const meta = document.createElement("span");
   meta.className = "place-card-meta";
   meta.textContent = [place.category_name, place.country_code, place.region, getAreaTag(place)].filter(Boolean).join(" · ");
-  content.append(name, meta);
+  const badges = document.createElement("span");
+  badges.className = "place-card-badges";
+  const scopeBadge = document.createElement("span");
+  scopeBadge.textContent = getPlaceScope(place) === "domestic" ? "국내" : getPlaceScope(place) === "international" ? "해외" : "지역 미정";
+  badges.appendChild(scopeBadge);
+  if (place.planned_month) {
+    const monthBadge = document.createElement("span");
+    monthBadge.textContent = `${place.planned_month}월`;
+    badges.appendChild(monthBadge);
+  }
+  content.append(name, badges, meta);
   if (place.memo) {
     const memo = document.createElement("span");
     memo.className = "place-card-note";
@@ -485,6 +531,20 @@ function renderMarkers(fitMap = false) {
     glyph.textContent = place.category_name.slice(0, 1);
     pin.appendChild(glyph);
     const marker = new state.AdvancedMarkerElement({ map: state.map, position, title: place.label, content: pin });
+    if (place.memo) {
+      const hoverCard = document.createElement("div");
+      hoverCard.className = "map-note-card";
+      const hoverTitle = document.createElement("strong");
+      hoverTitle.textContent = place.label;
+      const hoverMemo = document.createElement("p");
+      hoverMemo.textContent = place.memo;
+      hoverCard.append(hoverTitle, hoverMemo);
+      pin.addEventListener("mouseenter", () => {
+        state.hoverInfoWindow?.setContent(hoverCard);
+        state.hoverInfoWindow?.open({ map: state.map, anchor: marker, shouldFocus: false });
+      });
+      pin.addEventListener("mouseleave", () => state.hoverInfoWindow?.close());
+    }
     marker.addListener("click", () => {
       selectPlace(place);
       openDrawerForEdit(place);
@@ -557,6 +617,7 @@ function openDrawerForEdit(place) {
   els.longitude.value = place.longitude ?? "";
   els.placeLabel.value = place.label;
   els.placeCategory.value = String(place.category_id);
+  els.plannedMonth.value = place.planned_month ? String(place.planned_month) : "";
   els.countryCode.value = place.country_code;
   els.region.value = place.region;
   els.locality.value = place.locality;
@@ -576,6 +637,7 @@ function resetPlaceForm() {
   els.sourcePreview.hidden = true;
   els.deletePlaceButton.hidden = true;
   els.placeCategory.value = String(state.categories[0]?.id || "");
+  els.plannedMonth.value = "";
 }
 
 function openDrawer() {
@@ -598,6 +660,7 @@ async function savePlace(event) {
     provider_place_id: els.providerPlaceId.value,
     label: els.placeLabel.value,
     category_id: Number(els.placeCategory.value),
+    planned_month: els.plannedMonth.value === "" ? null : Number(els.plannedMonth.value),
     country_code: els.countryCode.value,
     region: els.region.value,
     locality: els.locality.value,

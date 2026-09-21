@@ -159,6 +159,7 @@ def init_database() -> None:
                 region TEXT NOT NULL DEFAULT '',
                 locality TEXT NOT NULL DEFAULT '',
                 district TEXT NOT NULL DEFAULT '',
+                planned_month INTEGER,
                 memo TEXT NOT NULL DEFAULT '',
                 latitude REAL,
                 longitude REAL,
@@ -174,6 +175,12 @@ def init_database() -> None:
             CREATE INDEX IF NOT EXISTS idx_places_updated ON places(updated_at DESC);
             """
         )
+        place_columns = {
+            row["name"] for row in db.execute("PRAGMA table_info(places)").fetchall()
+        }
+        if "planned_month" not in place_columns:
+            db.execute("ALTER TABLE places ADD COLUMN planned_month INTEGER")
+        db.execute("CREATE INDEX IF NOT EXISTS idx_places_planned_month ON places(planned_month)")
         now = iso_now()
         db.executemany(
             "INSERT OR IGNORE INTO categories(slug, name, color, created_at) VALUES (?, ?, ?, ?)",
@@ -279,17 +286,31 @@ def list_places(params: dict[str, list[str]]) -> list[dict]:
         "region": "p.region = ?",
         "locality": "p.locality = ?",
         "district": "p.district = ?",
+        "planned_month": "p.planned_month = ?",
     }
     for key, clause in filters.items():
         value = (params.get(key) or [""])[0].strip()
         if value:
             where.append(clause)
-            values.append(int(value) if key == "category_id" else value)
+            values.append(int(value) if key in {"category_id", "planned_month"} else value)
+    scope = (params.get("scope") or [""])[0].strip()
+    if scope == "domestic":
+        where.append("UPPER(p.country_code) = 'KR'")
+    elif scope == "international":
+        where.append("p.country_code <> '' AND UPPER(p.country_code) <> 'KR'")
     query = (params.get("q") or [""])[0].strip()
     if query:
-        where.append("(p.label LIKE ? OR p.memo LIKE ?)")
+        where.append(
+            "(p.label LIKE ? OR p.memo LIKE ? OR p.region LIKE ? "
+            "OR p.locality LIKE ? OR p.district LIKE ?)"
+        )
         term = f"%{query[:100]}%"
-        values.extend([term, term])
+        values.extend([term, term, term, term, term])
+    area_query = (params.get("area_q") or [""])[0].strip()
+    if area_query:
+        where.append("(p.region LIKE ? OR p.locality LIKE ? OR p.district LIKE ?)")
+        area_term = f"%{area_query[:100]}%"
+        values.extend([area_term, area_term, area_term])
     sql = PLACE_SELECT
     if where:
         sql += " WHERE " + " AND ".join(where)
@@ -341,6 +362,16 @@ def validate_place(data: dict, existing: sqlite3.Row | None = None) -> dict:
         longitude = number(longitude, "경도", -180, 180)
     else:
         latitude = longitude = None
+    planned_month_raw = current("planned_month", None)
+    if planned_month_raw is None or planned_month_raw == "":
+        planned_month = None
+    else:
+        try:
+            planned_month = int(planned_month_raw)
+        except (TypeError, ValueError):
+            raise ApiError(HTTPStatus.BAD_REQUEST, "방문 예정 월이 올바르지 않습니다.") from None
+        if not 1 <= planned_month <= 12:
+            raise ApiError(HTTPStatus.BAD_REQUEST, "방문 예정 월은 1월부터 12월 사이여야 합니다.")
     return {
         "provider": provider,
         "provider_place_id": provider_place_id,
@@ -350,6 +381,7 @@ def validate_place(data: dict, existing: sqlite3.Row | None = None) -> dict:
         "region": text(current("region"), 100, "주·도"),
         "locality": text(current("locality"), 100, "도시·시군구"),
         "district": text(current("district"), 100, "세부 지역"),
+        "planned_month": planned_month,
         "memo": text(current("memo"), 5000, "메모"),
         "latitude": latitude,
         "longitude": longitude,
@@ -367,14 +399,14 @@ def create_place(data: dict) -> dict:
                 """
                 INSERT INTO places(
                     provider, provider_place_id, label, category_id, country_code,
-                    region, locality, district, memo, latitude, longitude,
+                    region, locality, district, planned_month, memo, latitude, longitude,
                     location_cached_at, place_id_refreshed_at, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     values["provider"], values["provider_place_id"], values["label"],
                     values["category_id"], values["country_code"], values["region"],
-                    values["locality"], values["district"], values["memo"],
+                    values["locality"], values["district"], values["planned_month"], values["memo"],
                     values["latitude"], values["longitude"], cached_at,
                     now if values["provider"] == "google" else None, now, now,
                 ),
@@ -395,12 +427,12 @@ def update_place(place_id: int, data: dict) -> dict:
         db.execute(
             """
             UPDATE places SET label=?, category_id=?, country_code=?, region=?, locality=?,
-                district=?, memo=?, updated_at=? WHERE id=?
+                district=?, planned_month=?, memo=?, updated_at=? WHERE id=?
             """,
             (
                 values["label"], values["category_id"], values["country_code"],
                 values["region"], values["locality"], values["district"],
-                values["memo"], iso_now(), place_id,
+                values["planned_month"], values["memo"], iso_now(), place_id,
             ),
         )
         row = db.execute(PLACE_SELECT + " WHERE p.id = ?", (place_id,)).fetchone()
@@ -438,7 +470,7 @@ def delete_place(place_id: int) -> None:
 def export_data() -> dict:
     return {
         "exported_at": iso_now(),
-        "schema_version": 1,
+        "schema_version": 2,
         "categories": list_categories(),
         "places": list_places({}),
         "note": "Google 장소의 이름/주소는 정책상 저장하지 않으며 place ID와 사용자 입력만 포함합니다.",

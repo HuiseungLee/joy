@@ -72,9 +72,21 @@
 
         <section id="saved-view" class="panel-view" aria-labelledby="saved-tab">
           <div class="filter-grid">
+            <select id="scope-filter" aria-label="국내·해외 필터">
+              <option value="">국내 · 해외 전체</option>
+              <option value="domestic">국내</option>
+              <option value="international">해외</option>
+            </select>
+            <select id="month-filter" aria-label="방문 예정 월 필터">
+              <option value="">전체 월</option>
+              <option value="1">1월</option><option value="2">2월</option><option value="3">3월</option>
+              <option value="4">4월</option><option value="5">5월</option><option value="6">6월</option>
+              <option value="7">7월</option><option value="8">8월</option><option value="9">9월</option>
+              <option value="10">10월</option><option value="11">11월</option><option value="12">12월</option>
+            </select>
             <select id="category-filter" aria-label="카테고리 필터"><option value="">모든 카테고리</option></select>
             <select id="country-filter" aria-label="국가 필터"><option value="">모든 국가</option></select>
-            <select id="locality-filter" aria-label="도시·시군구 필터"><option value="">모든 도시·시군구</option></select>
+            <input id="area-search" class="filter-wide" type="search" maxlength="100" placeholder="시·군·구 검색" aria-label="시·군·구 검색">
           </div>
           <div class="list-toolbar">
             <span id="filtered-count">0곳</span>
@@ -132,10 +144,22 @@
         <span>저장 이름 <em>직접 확인해 주세요</em></span>
         <input id="place-label" maxlength="120" required placeholder="나만 알아보기 쉬운 이름">
       </label>
-      <label class="field">
-        <span>카테고리</span>
-        <select id="place-category" required></select>
-      </label>
+      <div class="two-column">
+        <label class="field">
+          <span>카테고리</span>
+          <select id="place-category" required></select>
+        </label>
+        <label class="field">
+          <span>방문 예정 월</span>
+          <select id="planned-month">
+            <option value="">월 미정</option>
+            <option value="1">1월</option><option value="2">2월</option><option value="3">3월</option>
+            <option value="4">4월</option><option value="5">5월</option><option value="6">6월</option>
+            <option value="7">7월</option><option value="8">8월</option><option value="9">9월</option>
+            <option value="10">10월</option><option value="11">11월</option><option value="12">12월</option>
+          </select>
+        </label>
+      </div>
 
       <div class="section-label">지역 태그</div>
       <div class="two-column">
@@ -146,7 +170,7 @@
         <label class="field"><span>도시·시군구</span><input id="locality" maxlength="100" placeholder="종로구, Paris"></label>
         <label class="field"><span>세부 지역</span><input id="district" maxlength="100" placeholder="삼청동, Shibuya"></label>
       </div>
-      <p class="policy-note">지역 태그와 저장 이름은 직접 확인한 내용으로 저장됩니다. Google 장소 정보는 저장하지 않습니다.</p>
+      <p class="policy-note">국가 코드가 KR이면 국내, 그 외 국가는 해외로 자동 분류됩니다. 지역 태그와 저장 이름은 직접 확인한 내용으로 저장됩니다.</p>
 
       <label class="field memo-field">
         <span>메모</span>
