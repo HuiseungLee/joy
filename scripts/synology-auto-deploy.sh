@@ -12,8 +12,9 @@ HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:7330/api/health}"
 STATE_DIR="$APP_DIR/.deploy-state"
 LOCK_DIR="$STATE_DIR/lock"
 LAST_SUCCESS_FILE="$STATE_DIR/last-successful-commit"
+LAST_ENV_HASH_FILE="$STATE_DIR/last-successful-env-hash"
 
-for required_command in git docker curl; do
+for required_command in git docker curl sha256sum awk; do
   if ! command -v "$required_command" >/dev/null 2>&1; then
     echo "Required command not found: $required_command" >&2
     exit 1
@@ -44,12 +45,18 @@ target_commit="$(git rev-parse "$DEPLOY_REMOTE/$DEPLOY_BRANCH")"
 current_commit="$(git rev-parse HEAD)"
 last_success=""
 if [ -f "$LAST_SUCCESS_FILE" ]; then last_success="$(sed -n '1p' "$LAST_SUCCESS_FILE")"; fi
+current_env_hash=""
+last_env_hash=""
+if [ -f .env ]; then
+  current_env_hash="$(sha256sum .env | awk '{print $1}')"
+fi
+if [ -f "$LAST_ENV_HASH_FILE" ]; then last_env_hash="$(sed -n '1p' "$LAST_ENV_HASH_FILE")"; fi
 
 if [ "$current_commit" != "$target_commit" ]; then
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] Updating $current_commit -> $target_commit"
   git merge --ff-only "$target_commit"
 fi
-if [ "$last_success" = "$target_commit" ] && curl -fsS "$HEALTH_URL" >/dev/null 2>&1; then
+if [ "$last_success" = "$target_commit" ] && [ "$last_env_hash" = "$current_env_hash" ] && curl -fsS "$HEALTH_URL" >/dev/null 2>&1; then
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] Already deployed: $target_commit"
   exit 0
 fi
@@ -61,6 +68,7 @@ attempt=1
 while [ "$attempt" -le 45 ]; do
   if curl -fsS "$HEALTH_URL" >/dev/null 2>&1; then
     printf '%s\n' "$target_commit" > "$LAST_SUCCESS_FILE"
+    printf '%s\n' "$current_env_hash" > "$LAST_ENV_HASH_FILE"
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Deployment succeeded: $target_commit"
     exit 0
   fi
