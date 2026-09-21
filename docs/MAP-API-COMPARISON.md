@@ -16,6 +16,8 @@
 
 전 세계 도시의 맛집과 명소를 한 지도에서 검색하려는 현재 요구에는 Google Maps Platform을 권장합니다. 개인용 호출량은 무료 구간보다 훨씬 작을 가능성이 높습니다. 대신 결제 계정과 API 키 제한은 필수이고, Google Places 콘텐츠 저장 제한 때문에 이 앱은 Place ID와 사용자 작성 데이터만 영구 보관합니다. 지도 마커 좌표는 29일 캐시 후 자동 갱신합니다.
 
+단, Google Maps Platform 공식 지원표에서 대한민국의 자동차 길찾기는 지원되지 않습니다. JOY MAP은 지도·장소 검색과 해외 경로에는 Google을 유지하고, 국내 자동차 경로만 카카오내비 길찾기 REST API를 사용하는 혼합 구성을 적용합니다.
+
 ## 공식 문서
 
 ### Google
@@ -27,6 +29,7 @@
 - [Place ID 저장 안내](https://developers.google.com/maps/documentation/places/web-service/place-id)
 - [Places API 정책과 캐시 제한](https://developers.google.com/maps/documentation/places/web-service/policies)
 - [비용·쿼터 관리](https://developers.google.com/maps/billing-and-pricing/manage-costs)
+- [국가별 기능 지원 범위](https://developers.google.com/maps/coverage)
 
 ### NAVER
 
@@ -40,3 +43,4 @@
 - [Kakao Map 이해하기·2026 정책](https://developers.kakao.com/docs/ko/kakaomap/common)
 - [Kakao 무료 쿼터와 추가 사용 단가](https://developers.kakao.com/docs/ko/getting-started/quota)
 - [Kakao Map REST API](https://developers.kakao.com/docs/ko/kakaomap/rest-api)
+- [카카오내비 자동차 길찾기](https://developers.kakaomobility.com/guide/navi-api/directions)

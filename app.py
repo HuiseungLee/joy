@@ -11,6 +11,7 @@ import base64
 import hashlib
 import hmac
 import json
+import math
 import mimetypes
 import os
 import re
@@ -26,7 +27,9 @@ from http import HTTPStatus
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.error import HTTPError, URLError
+from urllib.parse import parse_qs, urlencode, urlparse
+from urllib.request import Request, urlopen
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -40,6 +43,7 @@ APP_PASSWORD = os.getenv("APP_PASSWORD", "")
 SECRET_KEY = os.getenv("SECRET_KEY", "")
 GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "")
 GOOGLE_MAP_ID = os.getenv("GOOGLE_MAP_ID", "DEMO_MAP_ID")
+KAKAO_REST_API_KEY = os.getenv("KAKAO_REST_API_KEY", "")
 COOKIE_SECURE = os.getenv("COOKIE_SECURE", "false").lower() in {"1", "true", "yes", "on"}
 SESSION_HOURS = max(1, min(720, int(os.getenv("SESSION_HOURS", "168"))))
 COORDINATE_CACHE_DAYS = 29
@@ -477,6 +481,198 @@ def export_data() -> dict:
     }
 
 
+def validate_route_points(raw_points: object) -> list[dict]:
+    if not isinstance(raw_points, list) or not 2 <= len(raw_points) <= 27:
+        raise ApiError(HTTPStatus.BAD_REQUEST, "경로 장소는 2곳 이상 27곳 이하로 선택해 주세요.")
+    points = []
+    for raw_point in raw_points:
+        if not isinstance(raw_point, dict):
+            raise ApiError(HTTPStatus.BAD_REQUEST, "경로 좌표 형식을 확인해 주세요.")
+        try:
+            latitude = float(raw_point.get("latitude"))
+            longitude = float(raw_point.get("longitude"))
+        except (TypeError, ValueError):
+            raise ApiError(HTTPStatus.BAD_REQUEST, "경로 좌표 형식을 확인해 주세요.") from None
+        if not math.isfinite(latitude) or not math.isfinite(longitude):
+            raise ApiError(HTTPStatus.BAD_REQUEST, "경로 좌표 형식을 확인해 주세요.")
+        if not -90 <= latitude <= 90 or not -180 <= longitude <= 180:
+            raise ApiError(HTTPStatus.BAD_REQUEST, "경로 좌표 범위를 확인해 주세요.")
+        points.append({
+            "latitude": latitude,
+            "longitude": longitude,
+            "label": str(raw_point.get("label", ""))[:100],
+        })
+    return points
+
+
+def request_kakao_api(path: str, *, params: dict | None = None, payload: dict | None = None) -> dict:
+    if not KAKAO_REST_API_KEY:
+        raise ApiError(
+            HTTPStatus.SERVICE_UNAVAILABLE,
+            "국내 자동차 길찾기에 필요한 카카오 REST API 키가 아직 설정되지 않았습니다.",
+        )
+    url = f"https://apis-navi.kakaomobility.com{path}"
+    if params:
+        url = f"{url}?{urlencode(params)}"
+    body = json.dumps(payload, ensure_ascii=False).encode("utf-8") if payload is not None else None
+    request = Request(
+        url,
+        data=body,
+        method="POST" if payload is not None else "GET",
+        headers={
+            "Authorization": f"KakaoAK {KAKAO_REST_API_KEY}",
+            "Content-Type": "application/json",
+            "User-Agent": "JoyMap/1.0",
+        },
+    )
+    try:
+        with urlopen(request, timeout=15) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except HTTPError as error:
+        if error.code in {401, 403}:
+            message = "카카오 REST API 키 또는 호출 허용 IP 설정을 확인해 주세요."
+        elif error.code == 429:
+            message = "카카오 자동차 길찾기 사용 한도에 도달했습니다."
+        else:
+            message = f"카카오 자동차 길찾기 요청이 실패했습니다. (HTTP {error.code})"
+        raise ApiError(HTTPStatus.BAD_GATEWAY, message) from None
+    except (URLError, TimeoutError, json.JSONDecodeError):
+        raise ApiError(HTTPStatus.BAD_GATEWAY, "카카오 자동차 길찾기 서버에 연결하지 못했습니다.") from None
+
+
+def kakao_route_chunk(points: list[dict]) -> dict:
+    params = {
+        "origin": f'{points[0]["longitude"]},{points[0]["latitude"]}',
+        "destination": f'{points[-1]["longitude"]},{points[-1]["latitude"]}',
+        "priority": "RECOMMEND",
+        "summary": "false",
+        "alternatives": "false",
+        "road_details": "false",
+    }
+    if len(points) > 2:
+        params["waypoints"] = "|".join(
+            f'{point["longitude"]},{point["latitude"]}' for point in points[1:-1]
+        )
+    data = request_kakao_api("/v1/directions", params=params)
+    routes = data.get("routes") if isinstance(data, dict) else None
+    route = routes[0] if isinstance(routes, list) and routes else None
+    if not isinstance(route, dict) or route.get("result_code") != 0:
+        detail = route.get("result_msg") if isinstance(route, dict) else "경로 없음"
+        raise ApiError(HTTPStatus.UNPROCESSABLE_ENTITY, f"국내 자동차 경로를 찾지 못했습니다. ({detail})")
+    path: list[list[float]] = []
+    for section in route.get("sections", []):
+        for road in section.get("roads", []):
+            vertices = road.get("vertexes", [])
+            for index in range(0, len(vertices) - 1, 2):
+                point = [float(vertices[index + 1]), float(vertices[index])]
+                if not path or path[-1] != point:
+                    path.append(point)
+    summary = route.get("summary", {})
+    return {
+        "path": path,
+        "distance_meters": int(summary.get("distance", 0)),
+        "duration_millis": int(summary.get("duration", 0)) * 1000,
+    }
+
+
+def kakao_route_costs(points: list[dict]) -> list[list[float]]:
+    size = len(points)
+    costs = [[0.0 if origin == destination else math.inf for destination in range(size)] for origin in range(size)]
+    for origin_index, origin in enumerate(points):
+        destinations = [
+            {
+                "x": destination["longitude"],
+                "y": destination["latitude"],
+                "key": str(destination_index),
+            }
+            for destination_index, destination in enumerate(points)
+            if destination_index != origin_index
+        ]
+        data = request_kakao_api(
+            "/v1/destinations/directions",
+            payload={
+                "origin": {"x": origin["longitude"], "y": origin["latitude"]},
+                "destinations": destinations,
+                "radius": 10000,
+                "priority": "TIME",
+            },
+        )
+        for route in data.get("routes", []):
+            if route.get("result_code") != 0:
+                continue
+            try:
+                destination_index = int(route.get("key"))
+                duration = float(route.get("summary", {}).get("duration"))
+            except (TypeError, ValueError):
+                continue
+            if 0 <= destination_index < size and math.isfinite(duration):
+                costs[origin_index][destination_index] = duration
+    return costs
+
+
+def optimal_open_route_order(costs: list[list[float]]) -> list[int]:
+    size = len(costs)
+    state_count = 1 << size
+    best = [[math.inf] * size for _ in range(state_count)]
+    previous = [[-1] * size for _ in range(state_count)]
+    for start in range(size):
+        best[1 << start][start] = 0
+    for mask in range(1, state_count):
+        for last in range(size):
+            current = best[mask][last]
+            if not math.isfinite(current):
+                continue
+            for next_index in range(size):
+                if mask & (1 << next_index):
+                    continue
+                next_cost = current + costs[last][next_index]
+                next_mask = mask | (1 << next_index)
+                if next_cost < best[next_mask][next_index]:
+                    best[next_mask][next_index] = next_cost
+                    previous[next_mask][next_index] = last
+    full_mask = state_count - 1
+    last = min(range(size), key=lambda index: best[full_mask][index])
+    if not math.isfinite(best[full_mask][last]):
+        raise ApiError(HTTPStatus.UNPROCESSABLE_ENTITY, "선택한 장소를 모두 연결하는 국내 자동차 경로가 없습니다.")
+    order = []
+    mask = full_mask
+    while last >= 0:
+        order.append(last)
+        next_last = previous[mask][last]
+        mask ^= 1 << last
+        last = next_last
+    return list(reversed(order))
+
+
+def plan_domestic_driving_route(raw_points: object, optimize: bool = False) -> dict:
+    points = validate_route_points(raw_points)
+    if optimize and len(points) > 10:
+        raise ApiError(HTTPStatus.BAD_REQUEST, "순서 무관 최적화는 최대 10곳까지 지원합니다.")
+    order = optimal_open_route_order(kakao_route_costs(points)) if optimize else list(range(len(points)))
+    ordered_points = [points[index] for index in order]
+    full_path: list[list[float]] = []
+    distance_meters = 0
+    duration_millis = 0
+    for start in range(0, len(ordered_points) - 1, 6):
+        chunk = ordered_points[start:start + 7]
+        route = kakao_route_chunk(chunk)
+        if full_path and route["path"] and full_path[-1] == route["path"][0]:
+            full_path.extend(route["path"][1:])
+        else:
+            full_path.extend(route["path"])
+        distance_meters += route["distance_meters"]
+        duration_millis += route["duration_millis"]
+    if not full_path:
+        raise ApiError(HTTPStatus.UNPROCESSABLE_ENTITY, "국내 자동차 경로 선을 생성하지 못했습니다.")
+    return {
+        "provider": "kakao",
+        "order": order,
+        "path": full_path,
+        "distanceMeters": distance_meters,
+        "durationMillis": duration_millis,
+    }
+
+
 class JoyMapHandler(BaseHTTPRequestHandler):
     server_version = "JoyMap/1.0"
 
@@ -508,7 +704,11 @@ class JoyMapHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         try:
             if parsed.path == "/api/health":
-                self.send_json({"status": "ok", "maps_configured": bool(GOOGLE_MAPS_API_KEY)})
+                self.send_json({
+                    "status": "ok",
+                    "maps_configured": bool(GOOGLE_MAPS_API_KEY),
+                    "domestic_driving_configured": bool(KAKAO_REST_API_KEY),
+                })
                 return
             if parsed.path.startswith("/api/"):
                 self.require_auth()
@@ -539,6 +739,13 @@ class JoyMapHandler(BaseHTTPRequestHandler):
                 self.send_json({"category": create_category(data)}, HTTPStatus.CREATED)
             elif parsed.path == "/api/places":
                 self.send_json({"place": create_place(data)}, HTTPStatus.CREATED)
+            elif parsed.path == "/api/routes/driving":
+                self.send_json({
+                    "route": plan_domestic_driving_route(
+                        data.get("points"),
+                        bool(data.get("optimize", False)),
+                    )
+                })
             else:
                 raise ApiError(HTTPStatus.NOT_FOUND, "요청한 API를 찾을 수 없습니다.")
         except ApiError as error:
@@ -597,6 +804,7 @@ class JoyMapHandler(BaseHTTPRequestHandler):
                     "maps_api_key": GOOGLE_MAPS_API_KEY,
                     "map_id": GOOGLE_MAP_ID,
                     "configured": bool(GOOGLE_MAPS_API_KEY),
+                    "kakao_driving_configured": bool(KAKAO_REST_API_KEY),
                     "coordinate_cache_days": COORDINATE_CACHE_DAYS,
                 }
             )
@@ -728,6 +936,8 @@ def validate_environment() -> None:
         raise SystemExit("\n".join(problems))
     if not GOOGLE_MAPS_API_KEY:
         print("WARNING: GOOGLE_MAPS_API_KEY가 없어 지도와 장소 검색이 비활성화됩니다.", file=sys.stderr)
+    if not KAKAO_REST_API_KEY:
+        print("WARNING: KAKAO_REST_API_KEY가 없어 국내 자동차 길찾기가 비활성화됩니다.", file=sys.stderr)
 
 
 def main() -> None:

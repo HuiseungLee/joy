@@ -1115,6 +1115,71 @@ async function drawRoute(places, travelMode) {
   return { distanceMeters, durationMillis };
 }
 
+function isSouthKoreaPlace(place) {
+  if (place.country_code === "KR") return true;
+  return place.latitude >= 33 && place.latitude <= 39.5 && place.longitude >= 124 && place.longitude <= 132;
+}
+
+function openKakaoMapDrivingRoute(places) {
+  if (places.length > 7) return false;
+  const routePath = places.map((place) => [
+    encodeURIComponent(place.label || "장소"),
+    place.latitude,
+    place.longitude,
+  ].join(",")).join("/");
+  window.open(`https://map.kakao.com/link/by/car/${routePath}`, "_blank", "noopener,noreferrer");
+  return true;
+}
+
+async function drawDomesticDrivingRoute(places, mode) {
+  if (!state.config.kakao_driving_configured) {
+    const opened = mode === "ordered" && openKakaoMapDrivingRoute(places);
+    const error = new Error(opened
+      ? "카카오맵 새 창에서 자동차 길찾기를 열었습니다. 앱 지도에 경로선을 표시하려면 카카오 REST API 키를 설정해 주세요."
+      : "앱 지도에서 국내 자동차 길찾기를 사용하려면 카카오 REST API 키를 설정해 주세요.");
+    error.code = "KAKAO_NOT_CONFIGURED";
+    throw error;
+  }
+  const { route } = await api("/api/routes/driving", {
+    method: "POST",
+    body: JSON.stringify({
+      optimize: mode === "optimal",
+      points: places.map((place) => ({
+        latitude: place.latitude,
+        longitude: place.longitude,
+        label: place.label,
+      })),
+    }),
+  });
+  if (!Array.isArray(route?.path) || route.path.length < 2 || !Array.isArray(route.order)) {
+    throw new Error("국내 자동차 경로 응답을 확인하지 못했습니다.");
+  }
+  const orderedPlaces = route.order.map((index) => places[index]).filter(Boolean);
+  if (orderedPlaces.length !== places.length) throw new Error("국내 자동차 경로 순서를 확인하지 못했습니다.");
+  const path = route.path.map(([lat, lng]) => ({ lat: Number(lat), lng: Number(lng) }))
+    .filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lng));
+  if (path.length < 2) throw new Error("국내 자동차 경로 선을 확인하지 못했습니다.");
+  clearRoutePolylines();
+  const polyline = new google.maps.Polyline({
+    path,
+    strokeColor: "#1565c0",
+    strokeOpacity: .94,
+    strokeWeight: 6,
+    zIndex: 20,
+    map: state.map,
+  });
+  state.routePolylines = [polyline];
+  const bounds = new google.maps.LatLngBounds();
+  path.forEach((point) => bounds.extend(point));
+  state.map.fitBounds(bounds, 70);
+  return {
+    orderedPlaces,
+    provider: "kakao",
+    distanceMeters: Number(route.distanceMeters),
+    durationMillis: Number(route.durationMillis),
+  };
+}
+
 async function calculateSelectedRoute(mode) {
   const selected = getSelectedRoutePlaces();
   if (selected.length < 2) {
@@ -1136,18 +1201,28 @@ async function calculateSelectedRoute(mode) {
     ? `${travelModeLabel} 이동시간을 비교하는 중…`
     : `선택한 순서로 ${travelModeLabel} 경로를 계산하는 중…`;
   try {
-    await ensureRoutesLibrary();
-    const ordered = mode === "optimal" ? await findOptimalOpenRoute(selected, travelMode) : selected;
-    const route = await drawRoute(ordered, travelMode);
+    const useDomesticDriving = travelMode === "DRIVING" && selected.every(isSouthKoreaPlace);
+    let ordered;
+    let route;
+    if (useDomesticDriving) {
+      route = await drawDomesticDrivingRoute(selected, mode);
+      ordered = route.orderedPlaces;
+    } else {
+      await ensureRoutesLibrary();
+      ordered = mode === "optimal" ? await findOptimalOpenRoute(selected, travelMode) : selected;
+      route = await drawRoute(ordered, travelMode);
+    }
     state.routeDisplayIds = ordered.map((place) => place.id);
     updateRouteSelectionVisuals();
     renderRoutePlanner(false);
     const label = mode === "optimal" ? "순서 무관 최적 경로" : "클릭 순서 경로";
-    els.routeStatus.textContent = `${travelModeLabel} · ${label} · ${formatRouteDistance(route.distanceMeters)} · 약 ${formatRouteDuration(route.durationMillis)}`;
-    toast(`${travelModeLabel} ${label}를 지도에 표시했습니다.`);
+    const providerLabel = route.provider === "kakao" ? "자동차(카카오내비)" : travelModeLabel;
+    els.routeStatus.textContent = `${providerLabel} · ${label} · ${formatRouteDistance(route.distanceMeters)} · 약 ${formatRouteDuration(route.durationMillis)}`;
+    toast(`${providerLabel} ${label}를 지도에 표시했습니다.`);
   } catch (error) {
     console.error(error);
-    let message = error.code === "NO_ROUTE" ? error.message : describeRouteError(error);
+    const isDomesticProviderError = error.code === "KAKAO_NOT_CONFIGURED" || /카카오|국내 자동차/.test(error.message);
+    let message = error.code === "NO_ROUTE" || isDomesticProviderError ? error.message : describeRouteError(error);
     if (error.code === "NO_ROUTE" && travelMode === "DRIVING") {
       message += " 국내 장소는 자동차 경로가 제공되지 않을 수 있으니 대중교통을 선택해 보세요.";
     }

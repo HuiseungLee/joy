@@ -2,6 +2,7 @@ import importlib.util
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -90,6 +91,36 @@ class JoyMapDatabaseTests(unittest.TestCase):
         token = app.make_session_token("tester")
         self.assertEqual(app.verify_session_token(token), "tester")
         self.assertIsNone(app.verify_session_token(token + "x"))
+
+    def test_domestic_driving_route_converts_kakao_vertices(self):
+        kakao_response = {
+            "routes": [{
+                "result_code": 0,
+                "summary": {"distance": 1250, "duration": 240},
+                "sections": [{
+                    "roads": [{"vertexes": [127.1, 37.4, 127.2, 37.5]}],
+                }],
+            }],
+        }
+        points = [
+            {"latitude": 37.4, "longitude": 127.1, "label": "출발"},
+            {"latitude": 37.5, "longitude": 127.2, "label": "도착"},
+        ]
+        with patch.object(app, "request_kakao_api", return_value=kakao_response):
+            route = app.plan_domestic_driving_route(points)
+        self.assertEqual(route["provider"], "kakao")
+        self.assertEqual(route["order"], [0, 1])
+        self.assertEqual(route["path"], [[37.4, 127.1], [37.5, 127.2]])
+        self.assertEqual(route["distanceMeters"], 1250)
+        self.assertEqual(route["durationMillis"], 240000)
+
+    def test_domestic_route_rejects_invalid_coordinates(self):
+        with self.assertRaises(app.ApiError) as caught:
+            app.validate_route_points([
+                {"latitude": 37.4, "longitude": 127.1},
+                {"latitude": "not-a-number", "longitude": 127.2},
+            ])
+        self.assertEqual(caught.exception.status, 400)
 
 
 if __name__ == "__main__":

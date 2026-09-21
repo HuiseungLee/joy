@@ -40,6 +40,11 @@ printf 'Google Map ID: ' >&2
 IFS= read -r map_id
 valid_token "$map_id" || fail "Map ID contains unsupported characters"
 
+kakao_key="$(read_hidden 'Kakao REST API key (press Enter to skip): ')"
+if [ -n "$kakao_key" ]; then
+  valid_token "$kakao_key" || fail "Kakao REST API key contains unsupported characters"
+fi
+
 admin_password="$(read_hidden 'New JOY MAP admin password (16+ characters): ')"
 [ "${#admin_password}" -ge 16 ] || fail "Admin password must be at least 16 characters"
 valid_token "$admin_password" || fail "Use letters, numbers, and . _ - @ % + = : only"
@@ -66,6 +71,7 @@ app_gid="$(id -g)"
   printf 'COOKIE_SECURE=true\n'
   printf 'GOOGLE_MAPS_API_KEY=%s\n' "$maps_key"
   printf 'GOOGLE_MAP_ID=%s\n' "$map_id"
+  printf 'KAKAO_REST_API_KEY=%s\n' "$kakao_key"
   printf 'JOY_MAP_PORT=7330\n'
   printf 'JOY_MAP_UID=%s\n' "$app_uid"
   printf 'JOY_MAP_GID=%s\n' "$app_gid"
@@ -74,7 +80,7 @@ app_gid="$(id -g)"
 mv "$work_file" "$ENV_FILE"
 chmod 600 "$ENV_FILE" "$backup_file"
 
-unset maps_key map_id admin_password confirm_password secret_key app_uid app_gid
+unset maps_key map_id kakao_key admin_password confirm_password secret_key app_uid app_gid
 trap - EXIT INT TERM HUP
 
 printf '\nSettings saved. A private backup was created at:\n%s\n' "$backup_file"
