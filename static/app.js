@@ -21,6 +21,7 @@ const state = {
   routeModifierPressed: false,
   lastManualOpenAt: 0,
   manualPreviewMarker: null,
+  mapPlaceLoadingId: null,
   sharePreviewMarker: null,
   pendingSharedPlace: null,
   drawerFromShared: false,
@@ -298,7 +299,16 @@ async function initializeMap() {
     clickableIcons: true,
     gestureHandling: "greedy",
   });
-  state.hoverInfoWindow = new google.maps.InfoWindow({ disableAutoPan: true });
+  state.hoverInfoWindow = new google.maps.InfoWindow({
+    disableAutoPan: true,
+    headerDisabled: true,
+    maxWidth: 340,
+  });
+  state.map.addListener("click", (event) => {
+    if (!event.placeId) return;
+    event.stop?.();
+    void openDrawerForMapPlace(event.placeId);
+  });
   const handleContextMenu = (event) => {
     event.domEvent?.preventDefault?.();
     if (!event.latLng) return;
@@ -312,6 +322,35 @@ async function initializeMap() {
   // Older Maps builds can still emit only rightclick. The time guard above
   // prevents the compatibility event from opening the drawer twice.
   state.map.addListener("rightclick", handleContextMenu);
+}
+
+async function openDrawerForMapPlace(placeId) {
+  if (!state.Place || state.mapPlaceLoadingId === placeId) return;
+  const existing = state.places.find((place) =>
+    place.provider === "google" && place.provider_place_id === placeId
+  );
+  if (existing) {
+    selectPlace(existing);
+    openDrawerForEdit(existing);
+    toast("이미 저장한 장소입니다. 저장된 내용을 열었습니다.");
+    return;
+  }
+  state.mapPlaceLoadingId = placeId;
+  toast("지도에서 선택한 장소 정보를 불러오는 중…");
+  try {
+    const place = new state.Place({ id: placeId });
+    await place.fetchFields({
+      fields: ["displayName", "formattedAddress", "location", "googleMapsURI", "addressComponents"],
+    });
+    if (!place.location) throw new Error("장소의 위치 정보를 찾을 수 없습니다.");
+    openDrawerForSearch(place, { kicker: "SAVE FROM MAP PLACE" });
+    toast("장소 정보를 확인한 뒤 저장해 주세요.");
+  } catch (error) {
+    console.error(error);
+    toast(error.message || "선택한 장소 정보를 불러오지 못했습니다.", true);
+  } finally {
+    state.mapPlaceLoadingId = null;
+  }
 }
 
 function setView(view) {
