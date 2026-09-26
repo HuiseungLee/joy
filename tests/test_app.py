@@ -185,7 +185,16 @@ class JoyMapDatabaseTests(unittest.TestCase):
                 "result_code": 0,
                 "summary": {"distance": 1250, "duration": 240},
                 "sections": [{
+                    "distance": 1250,
+                    "duration": 240,
                     "roads": [{"vertexes": [127.1, 37.4, 127.2, 37.5]}],
+                    "guides": [{
+                        "guidance": "테스트로 방면으로 우회전",
+                        "name": "테스트로",
+                        "distance": 320,
+                        "duration": 45,
+                        "type": 3,
+                    }],
                 }],
             }],
         }
@@ -200,6 +209,10 @@ class JoyMapDatabaseTests(unittest.TestCase):
         self.assertEqual(route["path"], [[37.4, 127.1], [37.5, 127.2]])
         self.assertEqual(route["distanceMeters"], 1250)
         self.assertEqual(route["durationMillis"], 240000)
+        self.assertEqual(route["guidance"][0]["from"], "출발")
+        self.assertEqual(route["guidance"][0]["to"], "도착")
+        self.assertEqual(route["guidance"][0]["steps"][0]["instruction"], "테스트로 방면으로 우회전")
+        self.assertEqual(route["guidance"][0]["steps"][0]["durationMillis"], 45000)
 
     def test_domestic_route_rejects_invalid_coordinates(self):
         with self.assertRaises(app.ApiError) as caught:

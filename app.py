@@ -602,18 +602,37 @@ def kakao_route_chunk(points: list[dict]) -> dict:
         detail = route.get("result_msg") if isinstance(route, dict) else "경로 없음"
         raise ApiError(HTTPStatus.UNPROCESSABLE_ENTITY, f"국내 자동차 경로를 찾지 못했습니다. ({detail})")
     path: list[list[float]] = []
-    for section in route.get("sections", []):
-        for road in section.get("roads", []):
+    guidance: list[dict] = []
+    for section in route.get("sections") or []:
+        for road in section.get("roads") or []:
             vertices = road.get("vertexes", [])
             for index in range(0, len(vertices) - 1, 2):
                 point = [float(vertices[index + 1]), float(vertices[index])]
                 if not path or path[-1] != point:
                     path.append(point)
+        steps = []
+        for guide in section.get("guides") or []:
+            if not isinstance(guide, dict):
+                continue
+            instruction = str(guide.get("guidance") or guide.get("name") or "도로를 따라 이동")
+            steps.append({
+                "instruction": instruction,
+                "roadName": str(guide.get("name") or ""),
+                "distanceMeters": int(guide.get("distance") or 0),
+                "durationMillis": int(guide.get("duration") or 0) * 1000,
+                "maneuver": int(guide.get("type") or 0),
+            })
+        guidance.append({
+            "distanceMeters": int(section.get("distance") or 0),
+            "durationMillis": int(section.get("duration") or 0) * 1000,
+            "steps": steps,
+        })
     summary = route.get("summary", {})
     return {
         "path": path,
         "distance_meters": int(summary.get("distance", 0)),
         "duration_millis": int(summary.get("duration", 0)) * 1000,
+        "guidance": guidance,
     }
 
 
@@ -699,6 +718,7 @@ def plan_domestic_driving_route(raw_points: object, optimize: bool = False) -> d
     full_path: list[list[float]] = []
     distance_meters = 0
     duration_millis = 0
+    guidance: list[dict] = []
     for start in range(0, len(ordered_points) - 1, 6):
         chunk = ordered_points[start:start + 7]
         route = kakao_route_chunk(chunk)
@@ -708,6 +728,17 @@ def plan_domestic_driving_route(raw_points: object, optimize: bool = False) -> d
             full_path.extend(route["path"])
         distance_meters += route["distance_meters"]
         duration_millis += route["duration_millis"]
+        for local_index, leg in enumerate(route.get("guidance", [])):
+            global_index = start + local_index
+            if global_index + 1 >= len(ordered_points):
+                break
+            guidance.append({
+                "from": ordered_points[global_index]["label"],
+                "to": ordered_points[global_index + 1]["label"],
+                "distanceMeters": leg.get("distanceMeters", 0),
+                "durationMillis": leg.get("durationMillis", 0),
+                "steps": leg.get("steps", []),
+            })
     if not full_path:
         raise ApiError(HTTPStatus.UNPROCESSABLE_ENTITY, "국내 자동차 경로 선을 생성하지 못했습니다.")
     return {
@@ -716,6 +747,7 @@ def plan_domestic_driving_route(raw_points: object, optimize: bool = False) -> d
         "path": full_path,
         "distanceMeters": distance_meters,
         "durationMillis": duration_millis,
+        "guidance": guidance,
     }
 
 

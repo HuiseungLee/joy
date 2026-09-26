@@ -7,7 +7,7 @@
   <meta name="description" content="전 세계의 맛집과 명소를 기록하는 개인 지도">
   <title>JOY MAP</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/app.css?v=20260927-2">
+  <link rel="stylesheet" href="/app.css?v=20260927-3">
 </head>
 <body>
   <section id="login-screen" class="login-screen" aria-labelledby="login-title">
@@ -128,10 +128,11 @@
           <button id="place-detail-edit" class="place-detail-edit" type="button">✎ 저장 정보 수정</button>
         </section>
         <div id="map-context-menu" class="map-context-menu" role="menu" aria-label="지도 위치 메뉴" hidden>
-          <div class="map-context-heading">이 위치에서</div>
+          <div class="map-context-heading">경로 지점으로 설정</div>
           <button type="button" role="menuitem" data-map-action="start"><span class="context-dot start"></span>출발로 지정</button>
           <button type="button" role="menuitem" data-map-action="via"><span class="context-dot via"></span>경유로 지정</button>
           <button type="button" role="menuitem" data-map-action="destination"><span class="context-dot destination"></span>도착으로 지정</button>
+          <div class="map-context-heading map-context-separator">장소로 저장</div>
           <button type="button" role="menuitem" data-map-action="save"><span>＋</span>새 장소로 저장</button>
         </div>
         <section id="route-planner" class="route-planner" aria-live="polite" hidden>
@@ -154,10 +155,17 @@
           </div>
           <p id="route-status" class="route-status">장소 상세에서 출발지와 도착지를 지정하세요.</p>
           <div class="route-planner-actions">
-            <button id="route-ordered-button" class="secondary-button" type="button">① 지정 순서</button>
-            <button id="route-optimal-button" class="primary-button" type="button">② 경유지 최적화</button>
+            <button id="route-ordered-button" class="primary-button" type="button">경로 안내</button>
           </div>
-          <button id="route-details-button" class="route-details-button" type="button" hidden>대중교통 이용 방법 다시 보기</button>
+          <section id="route-guidance" class="route-guidance" aria-live="polite" hidden>
+            <div class="route-guidance-header">
+              <span id="route-guidance-kicker">ROUTE DIRECTIONS</span>
+              <h3 id="route-guidance-title">상세 이동 안내</h3>
+            </div>
+            <p id="route-guidance-summary" class="transit-summary"></p>
+            <div id="route-guidance-itinerary" class="transit-itinerary"></div>
+            <p class="policy-note transit-notice">실제 도로·운행 상황에 따라 안내 내용이 달라질 수 있습니다.</p>
+          </section>
         </section>
         <section id="share-confirm-card" class="share-confirm-card" aria-live="polite" hidden>
           <div class="share-confirm-copy">
@@ -285,25 +293,7 @@
     </form>
   </dialog>
 
-  <dialog id="transit-dialog" class="dialog transit-dialog" aria-labelledby="transit-dialog-title">
-    <div class="transit-dialog-inner">
-      <div class="dialog-header">
-        <div>
-          <p class="eyebrow">TRANSIT DIRECTIONS</p>
-          <h2 id="transit-dialog-title">대중교통 이동 안내</h2>
-        </div>
-        <button class="icon-button" type="button" aria-label="대중교통 안내 닫기" data-ui-action="close-transit-dialog">×</button>
-      </div>
-      <p id="transit-summary" class="transit-summary"></p>
-      <div id="transit-itinerary" class="transit-itinerary"></div>
-      <p class="policy-note transit-notice">실제 운행 시간과 승강장은 교통기관 사정에 따라 달라질 수 있습니다.</p>
-      <div class="dialog-actions">
-        <button class="primary-button" type="button" data-ui-action="close-transit-dialog">확인</button>
-      </div>
-    </div>
-  </dialog>
-
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="/app.js?v=20260927-2" defer></script>
+  <script src="/app.js?v=20260927-3" defer></script>
 </body>
 </html>

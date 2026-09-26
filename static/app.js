@@ -19,7 +19,8 @@ const state = {
   routeDisplayIds: [],
   routePolylines: [],
   routeTravelMode: "TRANSIT",
-  transitItinerary: null,
+  routeItinerary: null,
+  routeDrag: null,
   routeStartId: null,
   routeDestinationId: null,
   routeEditTarget: null,
@@ -99,11 +100,14 @@ const els = {
   routeDrivingMode: $("#route-driving-mode"),
   routeTransitMode: $("#route-transit-mode"),
   routeOrderedButton: $("#route-ordered-button"),
-  routeOptimalButton: $("#route-optimal-button"),
-  routeDetailsButton: $("#route-details-button"),
   routeClearButton: $("#route-clear-button"),
   routeAddViaButton: $("#route-add-via-button"),
   routeSwapButton: $("#route-swap-button"),
+  routeGuidance: $("#route-guidance"),
+  routeGuidanceKicker: $("#route-guidance-kicker"),
+  routeGuidanceTitle: $("#route-guidance-title"),
+  routeGuidanceSummary: $("#route-guidance-summary"),
+  routeGuidanceItinerary: $("#route-guidance-itinerary"),
   mapLegend: $("#map-legend"),
   drawer: $("#place-drawer"),
   drawerBackdrop: $("#drawer-backdrop"),
@@ -144,9 +148,6 @@ const els = {
   categoryList: $("#category-list"),
   categorySubmit: $("#category-submit"),
   categoryEditCancel: $("#category-edit-cancel"),
-  transitDialog: $("#transit-dialog"),
-  transitSummary: $("#transit-summary"),
-  transitItinerary: $("#transit-itinerary"),
   toast: $("#toast"),
 };
 
@@ -251,13 +252,15 @@ function bindEvents() {
   els.shareCancelButton.addEventListener("click", clearSharePreview);
   els.routeDrivingMode.addEventListener("click", () => setRouteTravelMode("DRIVING"));
   els.routeTransitMode.addEventListener("click", () => setRouteTravelMode("TRANSIT"));
-  els.routeOrderedButton.addEventListener("click", () => calculateSelectedRoute("ordered"));
-  els.routeOptimalButton.addEventListener("click", () => calculateSelectedRoute("optimal"));
-  els.routeDetailsButton.addEventListener("click", openTransitDialog);
+  els.routeOrderedButton.addEventListener("click", calculateSelectedRoute);
   els.routeClearButton.addEventListener("click", clearRouteSelection);
   els.routeAddViaButton.addEventListener("click", () => beginRouteStopEdit("via"));
   els.routeSwapButton.addEventListener("click", swapRouteEndpoints);
   els.routeStopList.addEventListener("click", handleRouteStopAction);
+  els.routeStopList.addEventListener("pointerdown", beginRouteStopDrag);
+  window.addEventListener("pointermove", moveRouteStopDrag);
+  window.addEventListener("pointerup", finishRouteStopDrag);
+  window.addEventListener("pointercancel", finishRouteStopDrag);
   els.drawerBackdrop.addEventListener("click", closeDrawer);
   els.placeForm.addEventListener("submit", savePlace);
   els.shareForm.addEventListener("submit", handleSharedMessage);
@@ -351,9 +354,6 @@ function handleUiAction(event) {
   } else if (action === "close-category-dialog") {
     event.preventDefault();
     if (els.categoryDialog.open) els.categoryDialog.close();
-  } else if (action === "close-transit-dialog") {
-    event.preventDefault();
-    if (els.transitDialog.open) els.transitDialog.close();
   }
 }
 
@@ -481,6 +481,7 @@ async function openDrawerForMapPlace(placeId) {
 
 function openPlaceDetail(place) {
   state.activeDetailPlaceId = place.id;
+  document.body.classList.add("place-detail-open");
   els.placeDetailCategory.textContent = [place.category_name, place.planned_month ? `${place.planned_month}월 방문` : ""].filter(Boolean).join(" · ");
   els.placeDetailTitle.textContent = place.label;
   els.placeDetailLocation.textContent = [place.region, place.locality, place.district].filter(Boolean).join(" · ") || "위치 태그 없음";
@@ -495,6 +496,7 @@ function openPlaceDetail(place) {
 
 function closePlaceDetail() {
   els.placeDetail.hidden = true;
+  document.body.classList.remove("place-detail-open");
   els.routePlanner.classList.remove("is-obscured");
   state.activeDetailPlaceId = null;
 }
@@ -550,6 +552,7 @@ function bindMapLongPress() {
 
 function showMapContextMenu(location, clientX, clientY) {
   closePlaceDetail();
+  document.body.classList.add("map-context-open");
   state.contextLocation = location;
   const stageRect = els.mapStage.getBoundingClientRect();
   const width = 210;
@@ -562,6 +565,7 @@ function showMapContextMenu(location, clientX, clientY) {
 
 function hideMapContextMenu() {
   els.mapContextMenu.hidden = true;
+  document.body.classList.remove("map-context-open");
 }
 
 function coordinateRoutePlace(location) {
@@ -1288,6 +1292,52 @@ function handleRouteStopAction(event) {
   else if (button.dataset.routeAction === "remove") removeRouteStop(id);
 }
 
+function beginRouteStopDrag(event) {
+  const handle = event.target.closest?.("[data-route-drag-id]");
+  if (!handle) return;
+  const id = Number(handle.dataset.routeDragId);
+  if (!Number.isFinite(id) || !state.routePlaceIds.includes(id)) return;
+  state.routeDrag = { id, pointerId: event.pointerId, moved: false, row: handle.closest(".route-stop-row") };
+  handle.setPointerCapture?.(event.pointerId);
+  document.body.classList.add("route-stop-dragging");
+  event.preventDefault();
+}
+
+function moveRouteStopDrag(event) {
+  const drag = state.routeDrag;
+  if (!drag || drag.pointerId !== event.pointerId) return;
+  const target = document.elementFromPoint(event.clientX, event.clientY)?.closest?.(".route-stop-row[data-route-id]");
+  const targetId = Number(target?.dataset.routeId);
+  if (!Number.isFinite(targetId) || targetId === drag.id || !state.routePlaceIds.includes(targetId)) return;
+  const ids = [...state.routePlaceIds];
+  const fromIndex = ids.indexOf(drag.id);
+  let targetIndex = ids.indexOf(targetId);
+  if (fromIndex < 0 || targetIndex < 0) return;
+  const after = event.clientY > target.getBoundingClientRect().top + target.getBoundingClientRect().height / 2;
+  ids.splice(fromIndex, 1);
+  targetIndex = ids.indexOf(targetId) + (after ? 1 : 0);
+  ids.splice(targetIndex, 0, drag.id);
+  state.routePlaceIds = ids;
+  state.routeStartId = ids[0] ?? null;
+  state.routeDestinationId = ids.at(-1) ?? null;
+  state.routeEditTarget = null;
+  if (!drag.moved) clearRouteDrawing();
+  drag.moved = true;
+  if (after) target.after(drag.row);
+  else target.before(drag.row);
+  event.preventDefault();
+}
+
+function finishRouteStopDrag(event) {
+  const drag = state.routeDrag;
+  if (!drag || drag.pointerId !== event.pointerId) return;
+  state.routeDrag = null;
+  document.body.classList.remove("route-stop-dragging");
+  updateRouteSelectionVisuals();
+  renderRoutePlanner(true);
+  if (drag.moved) toast("경로 지점 순서를 변경했습니다.");
+}
+
 function updateRouteSelectionVisuals() {
   const visualIds = getRouteVisualIds();
   document.querySelectorAll(".place-card[data-id]").forEach((card) => {
@@ -1327,11 +1377,19 @@ function renderRoutePlanner(resetStatus = false) {
     const place = id === null ? null : getRoutePlaceById(id);
     const item = document.createElement("li");
     item.className = `route-stop-row is-${role}`;
+    if (id !== null) item.dataset.routeId = String(id);
     if (state.routeEditTarget?.role === role && (state.routeEditTarget.replaceId === id || state.routeEditTarget.replaceId === null)) {
       item.classList.add("is-editing");
     }
     const marker = document.createElement("span");
     marker.className = "route-stop-marker";
+    const dragHandle = document.createElement("button");
+    dragHandle.type = "button";
+    dragHandle.className = "route-drag-handle";
+    dragHandle.disabled = !place || state.routePlaceIds.length < 2;
+    if (place) dragHandle.dataset.routeDragId = String(id);
+    dragHandle.setAttribute("aria-label", place ? `${place.label} 순서 변경` : "빈 경로 지점");
+    dragHandle.textContent = "⠿";
     const name = document.createElement("strong");
     name.textContent = place?.label || emptyLabel;
     if (!place) name.classList.add("is-empty");
@@ -1354,7 +1412,7 @@ function renderRoutePlanner(resetStatus = false) {
       remove.textContent = "×";
       actions.appendChild(remove);
     }
-    item.append(marker, name, actions);
+    item.append(dragHandle, marker, name, actions);
     els.routeStopList.appendChild(item);
   });
   const hasEnough = state.routePlaceIds.length >= 2 && state.routeStartId !== null && state.routeDestinationId !== null;
@@ -1362,17 +1420,13 @@ function renderRoutePlanner(resetStatus = false) {
   els.routeAddViaButton.classList.toggle("is-active", state.routeEditTarget?.role === "via" && state.routeEditTarget.replaceId === null);
   els.routeSwapButton.disabled = state.routeStartId === null || state.routeDestinationId === null;
   els.routeOrderedButton.disabled = !hasEnough;
-  els.routeOptimalButton.disabled = !hasEnough || state.routePlaceIds.length > 10;
-  els.routeOptimalButton.title = state.routePlaceIds.length > 10 ? "경유지 최적화는 최대 10곳까지 지원합니다." : "";
   if (resetStatus) {
     const travelModeLabel = getTravelModeLabel();
     els.routeStatus.textContent = state.routeEditTarget
       ? "지도나 저장 장소 목록에서 변경할 지점을 선택하세요."
       : !hasEnough
       ? "장소 상세 또는 지도 메뉴에서 출발지와 도착지를 지정하세요."
-      : state.routePlaceIds.length > 10
-        ? "지정 순서 경로는 가능하지만 경유지 최적화는 최대 10곳입니다."
-        : `두 방식 중 하나를 눌러 ${travelModeLabel} 경로를 계산하세요.`;
+      : `손잡이로 순서를 조정한 뒤 ${travelModeLabel} 경로 안내를 눌러 주세요.`;
   }
 }
 
@@ -1632,21 +1686,68 @@ function buildTransitItinerary(routes, places) {
   return routes.map((route, index) => ({
     from: places[index]?.label || `출발지 ${index + 1}`,
     to: places[index + 1]?.label || `도착지 ${index + 2}`,
+    distanceMeters: Number(route.distanceMeters) || 0,
+    durationMillis: Number(route.durationMillis) || 0,
     steps: (route.legs || []).flatMap((leg) => leg.steps || []).map(transitStepView),
   }));
 }
 
-function clearTransitDetails() {
-  state.transitItinerary = null;
-  els.routeDetailsButton.hidden = true;
-  if (els.transitDialog.open) els.transitDialog.close();
-  els.transitItinerary.replaceChildren();
+function drivingManeuverIcon(maneuver) {
+  const numeric = Number(maneuver);
+  if (Number.isFinite(numeric)) {
+    if ([2, 6, 8, 10, 12, 14, 16].includes(numeric)) return "↰";
+    if ([3, 7, 9, 11, 13, 15, 17].includes(numeric)) return "↱";
+    if ([18, 19].includes(numeric)) return "↩";
+  }
+  const value = String(maneuver || "").toUpperCase();
+  if (value.includes("U_TURN")) return "↩";
+  if (value.includes("ROUNDABOUT")) return "⟳";
+  if (value.includes("LEFT")) return value.includes("SLIGHT") ? "↖" : "↰";
+  if (value.includes("RIGHT")) return value.includes("SLIGHT") ? "↗" : "↱";
+  if (value.includes("RAMP")) return "⤴";
+  if (value.includes("MERGE")) return "⇧";
+  return "↑";
 }
 
-function renderTransitDialog(summary) {
-  const itinerary = state.transitItinerary || [];
-  els.transitSummary.textContent = summary;
-  els.transitItinerary.replaceChildren();
+function drivingStepView(step) {
+  const duration = Number.isFinite(step.staticDurationMillis)
+    ? formatRouteDuration(step.staticDurationMillis)
+    : step.localizedValues?.staticDuration || "";
+  const distance = step.localizedValues?.distance
+    || (Number.isFinite(step.distanceMeters) ? formatRouteDistance(step.distanceMeters) : "");
+  return {
+    type: "driving",
+    icon: drivingManeuverIcon(step.maneuver),
+    title: step.instructions || "도로를 따라 이동",
+    description: step.roadName || "",
+    meta: [distance, duration].filter(Boolean).join(" · "),
+  };
+}
+
+function buildDrivingItinerary(routes, places) {
+  const legs = routes.flatMap((route) => route.legs || []);
+  return legs.map((leg, index) => ({
+    from: places[index]?.label || `출발지 ${index + 1}`,
+    to: places[index + 1]?.label || `도착지 ${index + 2}`,
+    distanceMeters: Number(leg.distanceMeters) || 0,
+    durationMillis: Number(leg.staticDurationMillis) || Number(leg.durationMillis) || 0,
+    steps: (leg.steps || []).map(drivingStepView),
+  }));
+}
+
+function clearTransitDetails() {
+  state.routeItinerary = null;
+  els.routeGuidance.hidden = true;
+  els.routeGuidanceSummary.textContent = "";
+  els.routeGuidanceItinerary.replaceChildren();
+}
+
+function renderRouteGuidance(summary, travelMode) {
+  const itinerary = state.routeItinerary || [];
+  els.routeGuidanceKicker.textContent = travelMode === "TRANSIT" ? "TRANSIT DIRECTIONS" : "DRIVING DIRECTIONS";
+  els.routeGuidanceTitle.textContent = travelMode === "TRANSIT" ? "대중교통 이동 안내" : "자동차 경로 안내";
+  els.routeGuidanceSummary.textContent = summary;
+  els.routeGuidanceItinerary.replaceChildren();
   itinerary.forEach((leg, legIndex) => {
     const section = document.createElement("section");
     section.className = "transit-leg";
@@ -1655,13 +1756,17 @@ function renderTransitDialog(summary) {
     const number = document.createElement("span");
     number.textContent = String(legIndex + 1);
     const title = document.createElement("strong");
-    title.textContent = `${leg.from} → ${leg.to}`;
+    const legMetrics = [
+      Number(leg.distanceMeters) > 0 ? formatRouteDistance(Number(leg.distanceMeters)) : "",
+      Number(leg.durationMillis) > 0 ? `약 ${formatRouteDuration(Number(leg.durationMillis))}` : "",
+    ].filter(Boolean).join(" · ");
+    title.textContent = `${leg.from} → ${leg.to}${legMetrics ? ` · ${legMetrics}` : ""}`;
     header.append(number, title);
     section.appendChild(header);
     if (!leg.steps.length) {
       const empty = document.createElement("p");
       empty.className = "transit-empty";
-      empty.textContent = "이 구간은 상세 승하차 정보가 제공되지 않았습니다.";
+      empty.textContent = "이 구간은 상세 이동 정보가 제공되지 않았습니다.";
       section.appendChild(empty);
     } else {
       const list = document.createElement("ol");
@@ -1676,9 +1781,12 @@ function renderTransitDialog(summary) {
         copy.className = "transit-step-copy";
         const heading = document.createElement("strong");
         heading.textContent = step.title;
-        const description = document.createElement("p");
-        description.textContent = step.description;
-        copy.append(heading, description);
+        copy.appendChild(heading);
+        if (step.description) {
+          const description = document.createElement("p");
+          description.textContent = step.description;
+          copy.appendChild(description);
+        }
         if (step.meta) {
           const meta = document.createElement("small");
           meta.textContent = step.meta;
@@ -1689,18 +1797,14 @@ function renderTransitDialog(summary) {
       });
       section.appendChild(list);
     }
-    els.transitItinerary.appendChild(section);
+    els.routeGuidanceItinerary.appendChild(section);
   });
-}
-
-function openTransitDialog() {
-  if (!state.transitItinerary?.length) return;
-  if (!els.transitDialog.open) els.transitDialog.showModal();
+  els.routeGuidance.hidden = false;
+  setMobileSheetHeight(els.routePlanner, "--route-sheet-height", .76);
 }
 
 async function computeRouteSegment(origin, destination, travelMode) {
-  const fields = ["path", "viewport", "distanceMeters", "durationMillis"];
-  if (travelMode === "TRANSIT") fields.push("legs");
+  const fields = ["path", "viewport", "distanceMeters", "durationMillis", "legs"];
   const { routes = [] } = await state.Route.computeRoutes({
     origin,
     destination,
@@ -1724,7 +1828,7 @@ async function drawRoute(places, travelMode) {
       origin: locations[0],
       destination: locations.at(-1),
       travelMode,
-      fields: ["path", "viewport", "distanceMeters", "durationMillis"],
+      fields: ["path", "viewport", "distanceMeters", "durationMillis", "legs"],
     };
     if (locations.length > 2) request.intermediates = locations.slice(1, -1).map((location) => ({ location }));
     const { routes: computedRoutes = [] } = await state.Route.computeRoutes(request);
@@ -1759,7 +1863,9 @@ async function drawRoute(places, travelMode) {
   return {
     distanceMeters,
     durationMillis,
-    transitItinerary: travelMode === "TRANSIT" ? buildTransitItinerary(routes, places) : null,
+    itinerary: travelMode === "TRANSIT"
+      ? buildTransitItinerary(routes, places)
+      : buildDrivingItinerary(routes, places),
   };
 }
 
@@ -1825,54 +1931,61 @@ async function drawDomesticDrivingRoute(places, mode) {
     provider: "kakao",
     distanceMeters: Number(route.distanceMeters),
     durationMillis: Number(route.durationMillis),
+    itinerary: (route.guidance || []).map((leg) => ({
+      from: leg.from,
+      to: leg.to,
+      distanceMeters: Number(leg.distanceMeters) || 0,
+      durationMillis: Number(leg.durationMillis) || 0,
+      steps: (leg.steps || []).map((step) => ({
+        type: "driving",
+        icon: drivingManeuverIcon(step.maneuver),
+        title: step.instruction || "도로를 따라 이동",
+        description: step.roadName && step.roadName !== step.instruction ? step.roadName : "",
+        meta: [
+          Number(step.distanceMeters) > 0 ? formatRouteDistance(Number(step.distanceMeters)) : "",
+          Number(step.durationMillis) > 0 ? formatRouteDuration(Number(step.durationMillis)) : "",
+        ].filter(Boolean).join(" · "),
+      })),
+    })),
   };
 }
 
-async function calculateSelectedRoute(mode) {
+async function calculateSelectedRoute() {
   const selected = getSelectedRoutePlaces();
   if (selected.length < 2 || state.routeStartId === null || state.routeDestinationId === null) {
     toast("출발지와 도착지를 먼저 지정해 주세요.", true);
     return;
   }
-  if (mode === "optimal" && selected.length > 10) {
-    toast("경유지 최적화는 최대 10곳까지 지원합니다.", true);
-    return;
-  }
   clearTransitDetails();
   els.routeOrderedButton.disabled = true;
-  els.routeOptimalButton.disabled = true;
   els.routeDrivingMode.disabled = true;
   els.routeTransitMode.disabled = true;
   els.routeStatus.classList.add("is-loading");
   const travelMode = state.routeTravelMode;
   const travelModeLabel = getTravelModeLabel(travelMode);
-  els.routeStatus.textContent = mode === "optimal"
-    ? `${travelModeLabel} 이동시간을 비교하는 중…`
-    : `선택한 순서로 ${travelModeLabel} 경로를 계산하는 중…`;
+  els.routeStatus.textContent = `${travelModeLabel} 경로와 상세 안내를 계산하는 중…`;
   try {
     const useDomesticDriving = travelMode === "DRIVING" && selected.every(isSouthKoreaPlace);
     let ordered;
     let route;
     if (useDomesticDriving) {
-      route = await drawDomesticDrivingRoute(selected, mode);
+      route = await drawDomesticDrivingRoute(selected, "ordered");
       ordered = route.orderedPlaces;
     } else {
       await ensureRoutesLibrary();
-      ordered = mode === "optimal" ? await findOptimalOpenRoute(selected, travelMode) : selected;
+      ordered = selected;
       route = await drawRoute(ordered, travelMode);
     }
     state.routeDisplayIds = ordered.map((place) => place.id);
     updateRouteSelectionVisuals();
     renderRoutePlanner(false);
-    const label = mode === "optimal" ? "경유지 최적 경로" : "지정 순서 경로";
+    const label = "경로 안내";
     const providerLabel = route.provider === "kakao" ? "자동차(카카오내비)" : travelModeLabel;
     const routeSummary = `${providerLabel} · ${label} · ${formatRouteDistance(route.distanceMeters)} · 약 ${formatRouteDuration(route.durationMillis)}`;
     els.routeStatus.textContent = routeSummary;
-    if (travelMode === "TRANSIT" && route.transitItinerary?.length) {
-      state.transitItinerary = route.transitItinerary;
-      els.routeDetailsButton.hidden = false;
-      renderTransitDialog(routeSummary);
-      openTransitDialog();
+    if (route.itinerary?.length) {
+      state.routeItinerary = route.itinerary;
+      renderRouteGuidance(routeSummary, travelMode);
     }
     toast(`${providerLabel} ${label}를 지도에 표시했습니다.`);
   } catch (error) {
@@ -1890,7 +2003,6 @@ async function calculateSelectedRoute(mode) {
     els.routeTransitMode.disabled = false;
     const hasEnough = state.routePlaceIds.length >= 2 && state.routeStartId !== null && state.routeDestinationId !== null;
     els.routeOrderedButton.disabled = !hasEnough;
-    els.routeOptimalButton.disabled = !hasEnough || state.routePlaceIds.length > 10;
   }
 }
 
