@@ -513,8 +513,8 @@ function editDetailedPlace() {
 async function assignDetailedPlaceToRoute(role) {
   const place = getDetailedPlace();
   if (!place) return;
-  await assignRoutePlace(place, role);
-  closePlaceDetail();
+  const assigned = await assignRoutePlace(place, role);
+  if (assigned) closePlaceDetail();
 }
 
 function bindMapLongPress() {
