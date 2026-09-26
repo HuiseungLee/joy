@@ -19,6 +19,7 @@ const state = {
   routeDisplayIds: [],
   routePolylines: [],
   routeTravelMode: "TRANSIT",
+  transitItinerary: null,
   routeModifierPressed: false,
   lastManualOpenAt: 0,
   manualPreviewMarker: null,
@@ -74,6 +75,7 @@ const els = {
   routeTransitMode: $("#route-transit-mode"),
   routeOrderedButton: $("#route-ordered-button"),
   routeOptimalButton: $("#route-optimal-button"),
+  routeDetailsButton: $("#route-details-button"),
   routeClearButton: $("#route-clear-button"),
   mapLegend: $("#map-legend"),
   drawer: $("#place-drawer"),
@@ -112,6 +114,9 @@ const els = {
   categoryName: $("#category-name"),
   categoryColor: $("#category-color"),
   categoryList: $("#category-list"),
+  transitDialog: $("#transit-dialog"),
+  transitSummary: $("#transit-summary"),
+  transitItinerary: $("#transit-itinerary"),
   toast: $("#toast"),
 };
 
@@ -209,6 +214,7 @@ function bindEvents() {
   els.routeTransitMode.addEventListener("click", () => setRouteTravelMode("TRANSIT"));
   els.routeOrderedButton.addEventListener("click", () => calculateSelectedRoute("ordered"));
   els.routeOptimalButton.addEventListener("click", () => calculateSelectedRoute("optimal"));
+  els.routeDetailsButton.addEventListener("click", openTransitDialog);
   els.routeClearButton.addEventListener("click", clearRouteSelection);
   els.drawerBackdrop.addEventListener("click", closeDrawer);
   els.placeForm.addEventListener("submit", savePlace);
@@ -240,6 +246,9 @@ function handleUiAction(event) {
   } else if (action === "close-category-dialog") {
     event.preventDefault();
     if (els.categoryDialog.open) els.categoryDialog.close();
+  } else if (action === "close-transit-dialog") {
+    event.preventDefault();
+    if (els.transitDialog.open) els.transitDialog.close();
   }
 }
 
@@ -935,6 +944,7 @@ function clearRoutePolylines() {
 function clearRouteDrawing() {
   clearRoutePolylines();
   state.routeDisplayIds = [];
+  clearTransitDetails();
 }
 
 function clearRouteSelection() {
@@ -1056,12 +1066,164 @@ function formatRouteDuration(milliseconds) {
   return hours ? `${hours}시간 ${minutes ? `${minutes}분` : ""}`.trim() : `${minutes}분`;
 }
 
+function formatTransitTime(value) {
+  if (!value) return "";
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("ko-KR", { hour: "numeric", minute: "2-digit" }).format(date);
+}
+
+function getTransitVehicleLabel(vehicle) {
+  const labels = {
+    BUS: "버스",
+    SUBWAY: "지하철",
+    HEAVY_RAIL: "기차",
+    COMMUTER_TRAIN: "광역철도",
+    RAIL: "철도",
+    LIGHT_RAIL: "경전철",
+    TRAM: "트램",
+    MONORAIL: "모노레일",
+    HIGH_SPEED_TRAIN: "고속철도",
+    LONG_DISTANCE_TRAIN: "장거리 열차",
+    FERRY: "여객선",
+    CABLE_CAR: "케이블카",
+    GONDOLA_LIFT: "곤돌라",
+    FUNICULAR: "푸니쿨라",
+  };
+  return labels[String(vehicle?.vehicleType || "").toUpperCase()] || vehicle?.name || "대중교통";
+}
+
+function transitStepView(step) {
+  const transit = step.transitDetails;
+  const mode = String(step.travelMode || "").toUpperCase();
+  const duration = Number.isFinite(step.staticDurationMillis)
+    ? formatRouteDuration(step.staticDurationMillis)
+    : step.localizedValues?.staticDuration || "";
+  const distance = step.localizedValues?.distance
+    || (Number.isFinite(step.distanceMeters) ? formatRouteDistance(step.distanceMeters) : "");
+  if (transit) {
+    const line = transit.transitLine;
+    const vehicleLabel = getTransitVehicleLabel(line?.vehicle);
+    const lineName = line?.shortName || line?.name || transit.tripShortText || "";
+    const agencyNames = (line?.agencies || []).map((agency) => agency.name).filter(Boolean).join(", ");
+    const departure = transit.departureStop?.name || "승차 정류장";
+    const arrival = transit.arrivalStop?.name || "하차 정류장";
+    const departureTime = formatTransitTime(transit.departureTime);
+    const arrivalTime = formatTransitTime(transit.arrivalTime);
+    const meta = [
+      transit.headsign ? `${transit.headsign} 방면` : "",
+      Number.isFinite(transit.stopCount) && transit.stopCount > 0 ? `${transit.stopCount}개 정류장` : "",
+      departureTime && arrivalTime ? `${departureTime} 출발 · ${arrivalTime} 도착` : departureTime ? `${departureTime} 출발` : "",
+      Number.isFinite(transit.headwayMillis) && transit.headwayMillis > 0
+        ? `약 ${formatRouteDuration(transit.headwayMillis)} 간격`
+        : "",
+      duration,
+      agencyNames,
+    ].filter(Boolean);
+    return {
+      type: "transit",
+      icon: vehicleLabel === "버스" ? "🚌" : vehicleLabel.includes("지하철") || vehicleLabel.includes("철도") || vehicleLabel.includes("열차") || vehicleLabel === "기차" ? "🚇" : "🚎",
+      title: [vehicleLabel, lineName].filter(Boolean).join(" "),
+      description: `${departure}에서 승차 → ${arrival}에서 하차`,
+      meta: meta.join(" · "),
+    };
+  }
+  if (mode === "WALKING") {
+    return {
+      type: "walking",
+      icon: "🚶",
+      title: "도보 이동",
+      description: step.instructions || "다음 승차 지점까지 걸어서 이동",
+      meta: [distance, duration].filter(Boolean).join(" · "),
+    };
+  }
+  return {
+    type: "other",
+    icon: "→",
+    title: step.instructions || "이동",
+    description: "다음 구간으로 이동",
+    meta: [distance, duration].filter(Boolean).join(" · "),
+  };
+}
+
+function buildTransitItinerary(routes, places) {
+  return routes.map((route, index) => ({
+    from: places[index]?.label || `출발지 ${index + 1}`,
+    to: places[index + 1]?.label || `도착지 ${index + 2}`,
+    steps: (route.legs || []).flatMap((leg) => leg.steps || []).map(transitStepView),
+  }));
+}
+
+function clearTransitDetails() {
+  state.transitItinerary = null;
+  els.routeDetailsButton.hidden = true;
+  if (els.transitDialog.open) els.transitDialog.close();
+  els.transitItinerary.replaceChildren();
+}
+
+function renderTransitDialog(summary) {
+  const itinerary = state.transitItinerary || [];
+  els.transitSummary.textContent = summary;
+  els.transitItinerary.replaceChildren();
+  itinerary.forEach((leg, legIndex) => {
+    const section = document.createElement("section");
+    section.className = "transit-leg";
+    const header = document.createElement("div");
+    header.className = "transit-leg-header";
+    const number = document.createElement("span");
+    number.textContent = String(legIndex + 1);
+    const title = document.createElement("strong");
+    title.textContent = `${leg.from} → ${leg.to}`;
+    header.append(number, title);
+    section.appendChild(header);
+    if (!leg.steps.length) {
+      const empty = document.createElement("p");
+      empty.className = "transit-empty";
+      empty.textContent = "이 구간은 상세 승하차 정보가 제공되지 않았습니다.";
+      section.appendChild(empty);
+    } else {
+      const list = document.createElement("ol");
+      list.className = "transit-step-list";
+      leg.steps.forEach((step) => {
+        const item = document.createElement("li");
+        item.className = `transit-step is-${step.type}`;
+        const icon = document.createElement("span");
+        icon.className = "transit-step-icon";
+        icon.textContent = step.icon;
+        const copy = document.createElement("div");
+        copy.className = "transit-step-copy";
+        const heading = document.createElement("strong");
+        heading.textContent = step.title;
+        const description = document.createElement("p");
+        description.textContent = step.description;
+        copy.append(heading, description);
+        if (step.meta) {
+          const meta = document.createElement("small");
+          meta.textContent = step.meta;
+          copy.appendChild(meta);
+        }
+        item.append(icon, copy);
+        list.appendChild(item);
+      });
+      section.appendChild(list);
+    }
+    els.transitItinerary.appendChild(section);
+  });
+}
+
+function openTransitDialog() {
+  if (!state.transitItinerary?.length) return;
+  if (!els.transitDialog.open) els.transitDialog.showModal();
+}
+
 async function computeRouteSegment(origin, destination, travelMode) {
+  const fields = ["path", "viewport", "distanceMeters", "durationMillis"];
+  if (travelMode === "TRANSIT") fields.push("legs");
   const { routes = [] } = await state.Route.computeRoutes({
     origin,
     destination,
     travelMode,
-    fields: ["path", "viewport", "distanceMeters", "durationMillis"],
+    fields,
   });
   if (!routes.length) throw noRouteError(travelMode);
   return routes[0];
@@ -1112,7 +1274,11 @@ async function drawRoute(places, travelMode) {
   });
   if (pathPointCount) state.map.fitBounds(bounds, 70);
   else if (routes[0]?.viewport) state.map.fitBounds(routes[0].viewport, 70);
-  return { distanceMeters, durationMillis };
+  return {
+    distanceMeters,
+    durationMillis,
+    transitItinerary: travelMode === "TRANSIT" ? buildTransitItinerary(routes, places) : null,
+  };
 }
 
 function isSouthKoreaPlace(place) {
@@ -1190,6 +1356,7 @@ async function calculateSelectedRoute(mode) {
     toast("순서 무관 최적화는 최대 10곳까지 지원합니다.", true);
     return;
   }
+  clearTransitDetails();
   els.routeOrderedButton.disabled = true;
   els.routeOptimalButton.disabled = true;
   els.routeDrivingMode.disabled = true;
@@ -1217,7 +1384,14 @@ async function calculateSelectedRoute(mode) {
     renderRoutePlanner(false);
     const label = mode === "optimal" ? "순서 무관 최적 경로" : "클릭 순서 경로";
     const providerLabel = route.provider === "kakao" ? "자동차(카카오내비)" : travelModeLabel;
-    els.routeStatus.textContent = `${providerLabel} · ${label} · ${formatRouteDistance(route.distanceMeters)} · 약 ${formatRouteDuration(route.durationMillis)}`;
+    const routeSummary = `${providerLabel} · ${label} · ${formatRouteDistance(route.distanceMeters)} · 약 ${formatRouteDuration(route.durationMillis)}`;
+    els.routeStatus.textContent = routeSummary;
+    if (travelMode === "TRANSIT" && route.transitItinerary?.length) {
+      state.transitItinerary = route.transitItinerary;
+      els.routeDetailsButton.hidden = false;
+      renderTransitDialog(routeSummary);
+      openTransitDialog();
+    }
     toast(`${providerLabel} ${label}를 지도에 표시했습니다.`);
   } catch (error) {
     console.error(error);

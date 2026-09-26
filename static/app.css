@@ -220,6 +220,28 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .route-status.is-loading::before { content: ""; display: inline-block; width: 11px; height: 11px; margin-right: 7px; border: 2px solid #ccd5e4; border-top-color: var(--blue); border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -2px; }
 .route-planner-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .route-planner-actions button { min-height: 40px; padding: 8px 10px; font-size: .76rem; }
+.route-details-button { width: 100%; min-height: 38px; margin-top: 8px; border: 1px solid #c8b7ef; border-radius: 9px; background: #f6f0ff; color: #6542aa; font-size: .76rem; font-weight: 900; cursor: pointer; }
+.route-details-button:hover { background: #ede2ff; }
+.transit-dialog { width: min(680px, calc(100% - 28px)); max-height: min(780px, calc(100dvh - 28px)); overflow: auto; }
+.transit-dialog::backdrop { background: rgba(19,34,56,.16); backdrop-filter: none; }
+.transit-dialog-inner { padding: 24px; }
+.transit-summary { margin: -8px 0 18px; border-radius: 11px; background: #f3effb; padding: 12px 14px; color: #574372; font-size: .86rem; font-weight: 800; line-height: 1.5; }
+.transit-itinerary { display: grid; gap: 18px; }
+.transit-leg { border: 1px solid var(--line); border-radius: 13px; overflow: hidden; background: white; }
+.transit-leg-header { display: flex; align-items: center; gap: 9px; border-bottom: 1px solid var(--line); background: #faf8f4; padding: 11px 13px; }
+.transit-leg-header span { display: grid; width: 23px; height: 23px; flex: 0 0 auto; place-items: center; border-radius: 50%; background: var(--blue); color: white; font-size: .7rem; font-weight: 900; }
+.transit-leg-header strong { min-width: 0; overflow: hidden; font-size: .86rem; text-overflow: ellipsis; white-space: nowrap; }
+.transit-step-list { margin: 0; padding: 0; list-style: none; }
+.transit-step { display: grid; grid-template-columns: 34px 1fr; gap: 10px; padding: 13px; }
+.transit-step + .transit-step { border-top: 1px dashed #dfe3e9; }
+.transit-step-icon { display: grid; width: 32px; height: 32px; place-items: center; border-radius: 10px; background: #edf3ff; color: var(--blue); font-size: 1rem; }
+.transit-step.is-transit .transit-step-icon { background: #f1e9ff; color: #6740b2; }
+.transit-step-copy { min-width: 0; }
+.transit-step-copy strong { display: block; color: var(--ink); font-size: .9rem; line-height: 1.35; }
+.transit-step-copy p { margin: 4px 0 0; color: #48566b; font-size: .82rem; line-height: 1.55; }
+.transit-step-copy small { display: block; margin-top: 5px; color: #7a8390; font-size: .72rem; line-height: 1.45; }
+.transit-empty { margin: 0; border: 1px dashed #cfd6e1; border-radius: 11px; padding: 18px; color: #687385; font-size: .84rem; text-align: center; }
+.transit-notice { margin-top: 16px; }
 .share-confirm-card { position: absolute; z-index: 5; left: 50%; bottom: 28px; width: min(620px, calc(100% - 40px)); transform: translateX(-50%); border: 1px solid rgba(19,34,56,.2); border-radius: 16px; background: rgba(255,253,249,.97); padding: 18px; box-shadow: 0 16px 46px rgba(19,34,56,.24); backdrop-filter: blur(8px); }
 .share-confirm-copy { min-width: 0; }
 .share-confirm-kicker { display: block; margin-bottom: 5px; color: var(--accent); font-size: .68rem; font-weight: 900; letter-spacing: .1em; }

@@ -7,7 +7,7 @@
   <meta name="description" content="전 세계의 맛집과 명소를 기록하는 개인 지도">
   <title>JOY MAP</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/app.css?v=20260922-2">
+  <link rel="stylesheet" href="/app.css?v=20260922-4">
 </head>
 <body>
   <section id="login-screen" class="login-screen" aria-labelledby="login-title">
@@ -129,6 +129,7 @@
             <button id="route-ordered-button" class="secondary-button" type="button">① 클릭 순서</button>
             <button id="route-optimal-button" class="primary-button" type="button">② 순서 무관 최적</button>
           </div>
+          <button id="route-details-button" class="route-details-button" type="button" hidden>대중교통 이용 방법 다시 보기</button>
         </section>
         <section id="share-confirm-card" class="share-confirm-card" aria-live="polite" hidden>
           <div class="share-confirm-copy">
@@ -252,7 +253,25 @@
     </form>
   </dialog>
 
+  <dialog id="transit-dialog" class="dialog transit-dialog" aria-labelledby="transit-dialog-title">
+    <div class="transit-dialog-inner">
+      <div class="dialog-header">
+        <div>
+          <p class="eyebrow">TRANSIT DIRECTIONS</p>
+          <h2 id="transit-dialog-title">대중교통 이동 안내</h2>
+        </div>
+        <button class="icon-button" type="button" aria-label="대중교통 안내 닫기" data-ui-action="close-transit-dialog">×</button>
+      </div>
+      <p id="transit-summary" class="transit-summary"></p>
+      <div id="transit-itinerary" class="transit-itinerary"></div>
+      <p class="policy-note transit-notice">실제 운행 시간과 승강장은 교통기관 사정에 따라 달라질 수 있습니다.</p>
+      <div class="dialog-actions">
+        <button class="primary-button" type="button" data-ui-action="close-transit-dialog">확인</button>
+      </div>
+    </div>
+  </dialog>
+
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="/app.js?v=20260922-3" defer></script>
+  <script src="/app.js?v=20260922-4" defer></script>
 </body>
 </html>
