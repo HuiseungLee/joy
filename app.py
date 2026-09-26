@@ -861,7 +861,7 @@ class JoyMapHandler(BaseHTTPRequestHandler):
         secure = "; Secure" if COOKIE_SECURE else ""
         return (
             f"joy_session={value}; Path=/; Max-Age={max_age}; HttpOnly; "
-            f"SameSite=Strict{secure}"
+            f"SameSite=Lax{secure}"
         )
 
     def read_json(self) -> dict:

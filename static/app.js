@@ -121,7 +121,7 @@ const els = {
 
 async function api(path, options = {}) {
   const request = {
-    credentials: "same-origin",
+    credentials: "include",
     ...options,
     headers: {
       ...(options.body ? { "Content-Type": "application/json", "X-Requested-With": "JoyMap" } : {}),
