@@ -24,7 +24,7 @@
 
 ```text
 인터넷
-  → https://joy.lhsstart.synology.me
+  → https://map.lhsstart.synology.me
   → DSM 역방향 프록시·Let's Encrypt 인증서
   → 127.0.0.1:7330
   → JOY MAP 컨테이너
@@ -39,7 +39,7 @@ Container Manager를 권장합니다. Web Station만으로는 로그인 API와 S
 2. **Maps JavaScript API**, **Places API (New)**, **Routes API**를 활성화합니다.
 3. 사용자 인증 정보에서 API 키를 만듭니다.
 4. 애플리케이션 제한을 **웹사이트**로 설정하고 다음 리퍼러만 허용합니다.
-   - `https://joy.lhsstart.synology.me/*`
+   - `https://map.lhsstart.synology.me/*`
    - 초기 내부 시험이 필요하면 `http://localhost:7330/*`를 임시 추가
 5. API 제한을 **Maps JavaScript API**, **Places API (New)**, **Routes API**로 한정합니다.
 6. Map Management에서 JavaScript용 Map ID를 만들거나, 첫 시험에는 `DEMO_MAP_ID`를 사용합니다.
@@ -67,15 +67,15 @@ Container Manager UI를 사용할 때는 **프로젝트 → 생성 → docker-co
 
 NAS 자체에서 확인할 주소는 `http://127.0.0.1:7330`입니다. 기본 Compose는 보안을 위해 `127.0.0.1`에만 연결합니다. 다른 PC에서 내부 확인이 필요하면 잠시 `127.0.0.1:` 부분을 제거하고 `.env`의 `COOKIE_SECURE=false`로 시험한 뒤, 두 설정을 반드시 원래대로 되돌리세요.
 
-## 3. joy.lhsstart.synology.me 연결
+## 3. map.lhsstart.synology.me 연결
 
 1. 도메인의 A/AAAA 레코드 또는 DDNS가 NAS 공인 주소를 가리키게 합니다.
-2. DSM **제어판 → 보안 → 인증서**에서 `joy.lhsstart.synology.me`용 Let's Encrypt 인증서를 발급합니다.
+2. DSM **제어판 → 보안 → 인증서**에서 `map.lhsstart.synology.me`용 Let's Encrypt 인증서를 발급합니다.
 3. DSM **제어판 → 로그인 포털 → 고급 → 역방향 프록시**에서 규칙을 만듭니다.
-   - 소스: HTTPS / `joy.lhsstart.synology.me` / 443
+   - 소스: HTTPS / `map.lhsstart.synology.me` / 443
    - 대상: HTTP / `localhost` / 7330
 4. 생성한 인증서를 해당 호스트에 할당합니다.
-5. 공유기에서 외부 443 포트를 NAS로 전달하고 `https://joy.lhsstart.synology.me`로 접속합니다.
+5. 공유기에서 외부 443 포트를 NAS로 전달하고 `https://map.lhsstart.synology.me`로 접속합니다.
 
 운영 환경에서는 `.env`의 `COOKIE_SECURE=true`를 유지하세요.
 
