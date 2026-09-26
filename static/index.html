@@ -7,7 +7,7 @@
   <meta name="description" content="전 세계의 맛집과 명소를 기록하는 개인 지도">
   <title>JOY MAP</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/app.css?v=20260922-4">
+  <link rel="stylesheet" href="/app.css?v=20260926-1">
 </head>
 <body>
   <section id="login-screen" class="login-screen" aria-labelledby="login-title">
@@ -26,10 +26,7 @@
         <p class="eyebrow">PRIVATE PLACE ARCHIVE</p>
         <h1 id="login-title">JOY MAP</h1>
         <p class="login-copy">다시 가고 싶은 곳을 나만의 지도에 모아보세요.</p>
-        <label>
-          <span>아이디</span>
-          <input id="login-username" name="username" autocomplete="username" required value="admin">
-        </label>
+        <input name="username" type="hidden" autocomplete="username" value="admin">
         <label>
           <span>비밀번호</span>
           <input id="login-password" name="password" type="password" autocomplete="current-password" required>
@@ -272,6 +269,6 @@
   </dialog>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="/app.js?v=20260922-4" defer></script>
+  <script src="/app.js?v=20260926-1" defer></script>
 </body>
 </html>

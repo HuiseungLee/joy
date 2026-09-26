@@ -1,6 +1,10 @@
 import importlib.util
+import json
 import tempfile
+import threading
 import unittest
+from http.client import HTTPConnection
+from http.server import ThreadingHTTPServer
 from pathlib import Path
 from unittest.mock import patch
 
@@ -91,6 +95,55 @@ class JoyMapDatabaseTests(unittest.TestCase):
         token = app.make_session_token("tester")
         self.assertEqual(app.verify_session_token(token), "tester")
         self.assertIsNone(app.verify_session_token(token + "x"))
+
+    def test_eight_character_password_is_allowed(self):
+        with (
+            patch.object(app, "APP_PASSWORD", "map-1234"),
+            patch.object(app, "SECRET_KEY", "s" * 32),
+            patch.object(app, "GOOGLE_MAPS_API_KEY", "maps-key"),
+            patch.object(app, "KAKAO_REST_API_KEY", "kakao-key"),
+        ):
+            app.validate_environment()
+
+        with (
+            patch.object(app, "APP_PASSWORD", "short7"),
+            patch.object(app, "SECRET_KEY", "s" * 32),
+        ):
+            with self.assertRaises(SystemExit):
+                app.validate_environment()
+
+    def test_password_only_login(self):
+        with (
+            patch.object(app, "APP_USERNAME", "admin"),
+            patch.object(app, "APP_PASSWORD", "map-1234"),
+            patch.object(app, "COOKIE_SECURE", True),
+        ):
+            server = ThreadingHTTPServer(("127.0.0.1", 0), app.JoyMapHandler)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                connection = HTTPConnection("127.0.0.1", server.server_port)
+                body = json.dumps({"password": "map-1234"})
+                connection.request(
+                    "POST",
+                    "/api/login",
+                    body=body,
+                    headers={
+                        "Content-Type": "application/json",
+                        "X-Requested-With": "JoyMap",
+                    },
+                )
+                response = connection.getresponse()
+                payload = json.loads(response.read())
+                self.assertEqual(response.status, 200)
+                self.assertEqual(payload["username"], "admin")
+                self.assertIn("joy_session=", response.getheader("Set-Cookie"))
+                self.assertIn("Secure", response.getheader("Set-Cookie"))
+                connection.close()
+            finally:
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=2)
 
     def test_domestic_driving_route_converts_kakao_vertices(self):
         kakao_response = {

@@ -45,11 +45,11 @@ if [ -n "$kakao_key" ]; then
   valid_token "$kakao_key" || fail "Kakao REST API key contains unsupported characters"
 fi
 
-admin_password="$(read_hidden 'New JOY MAP admin password (16+ characters): ')"
-[ "${#admin_password}" -ge 16 ] || fail "Admin password must be at least 16 characters"
+admin_password="$(read_hidden 'New JOY MAP password (8+ characters): ')"
+[ "${#admin_password}" -ge 8 ] || fail "Password must be at least 8 characters"
 valid_token "$admin_password" || fail "Use letters, numbers, and . _ - @ % + = : only"
 
-confirm_password="$(read_hidden 'Repeat admin password: ')"
+confirm_password="$(read_hidden 'Repeat password: ')"
 [ "$admin_password" = "$confirm_password" ] || fail "Passwords do not match"
 
 secret_key="$(openssl rand -hex 32)"

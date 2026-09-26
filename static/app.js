@@ -35,7 +35,6 @@ const state = {
 const els = {
   loginScreen: $("#login-screen"),
   loginForm: $("#login-form"),
-  loginUsername: $("#login-username"),
   loginPassword: $("#login-password"),
   loginError: $("#login-error"),
   app: $("#app"),
@@ -260,7 +259,7 @@ async function handleLogin(event) {
   try {
     await api("/api/login", {
       method: "POST",
-      body: JSON.stringify({ username: els.loginUsername.value, password: els.loginPassword.value }),
+      body: JSON.stringify({ password: els.loginPassword.value }),
     });
     await initializeApp();
   } catch (error) {

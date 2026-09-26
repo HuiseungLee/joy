@@ -831,18 +831,17 @@ class JoyMapHandler(BaseHTTPRequestHandler):
             LOGIN_ATTEMPTS[ip] = recent
             if len(recent) >= 10:
                 raise ApiError(HTTPStatus.TOO_MANY_REQUESTS, "잠시 후 다시 로그인해 주세요.")
-        username = str(data.get("username", ""))
         password = str(data.get("password", ""))
-        valid = hmac.compare_digest(username, APP_USERNAME) and hmac.compare_digest(password, APP_PASSWORD)
+        valid = hmac.compare_digest(password, APP_PASSWORD)
         if not valid:
             with LOGIN_LOCK:
                 LOGIN_ATTEMPTS.setdefault(ip, []).append(now)
-            raise ApiError(HTTPStatus.UNAUTHORIZED, "아이디 또는 비밀번호를 확인해 주세요.")
+            raise ApiError(HTTPStatus.UNAUTHORIZED, "비밀번호를 확인해 주세요.")
         with LOGIN_LOCK:
             LOGIN_ATTEMPTS.pop(ip, None)
-        token = make_session_token(username)
+        token = make_session_token(APP_USERNAME)
         self.send_json(
-            {"authenticated": True, "username": username},
+            {"authenticated": True, "username": APP_USERNAME},
             headers={"Set-Cookie": self.session_cookie(token, SESSION_HOURS * 3600)},
         )
 
@@ -928,8 +927,8 @@ class JoyMapHandler(BaseHTTPRequestHandler):
 
 def validate_environment() -> None:
     problems = []
-    if len(APP_PASSWORD) < 12:
-        problems.append("APP_PASSWORD는 12자 이상으로 설정해야 합니다.")
+    if len(APP_PASSWORD) < 8:
+        problems.append("APP_PASSWORD는 8자 이상으로 설정해야 합니다.")
     if len(SECRET_KEY) < 32:
         problems.append("SECRET_KEY는 32자 이상으로 설정해야 합니다.")
     if problems:
