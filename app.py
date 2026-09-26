@@ -529,12 +529,24 @@ def request_kakao_api(path: str, *, params: dict | None = None, payload: dict | 
         with urlopen(request, timeout=15) as response:
             return json.loads(response.read().decode("utf-8"))
     except HTTPError as error:
+        kakao_detail = ""
+        try:
+            error_payload = json.loads(error.read().decode("utf-8"))
+            if isinstance(error_payload, dict):
+                detail = error_payload.get("msg") or error_payload.get("message")
+                code = error_payload.get("code")
+                if detail:
+                    kakao_detail = f" 카카오 응답: {detail}"
+                    if code is not None:
+                        kakao_detail += f" (code {code})"
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            pass
         if error.code in {401, 403}:
-            message = "카카오 REST API 키 또는 호출 허용 IP 설정을 확인해 주세요."
+            message = f"카카오 REST API 키 또는 호출 허용 IP 설정을 확인해 주세요.{kakao_detail}"
         elif error.code == 429:
-            message = "카카오 자동차 길찾기 사용 한도에 도달했습니다."
+            message = f"카카오 자동차 길찾기 사용 한도에 도달했습니다.{kakao_detail}"
         else:
-            message = f"카카오 자동차 길찾기 요청이 실패했습니다. (HTTP {error.code})"
+            message = f"카카오 자동차 길찾기 요청이 실패했습니다. (HTTP {error.code}){kakao_detail}"
         raise ApiError(HTTPStatus.BAD_GATEWAY, message) from None
     except (URLError, TimeoutError, json.JSONDecodeError):
         raise ApiError(HTTPStatus.BAD_GATEWAY, "카카오 자동차 길찾기 서버에 연결하지 못했습니다.") from None
