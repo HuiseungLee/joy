@@ -1,4 +1,4 @@
-# JOY MAP
+# PRINSS MAP
 
 전 세계의 맛집·명소를 검색해 개인 메모와 지역 태그로 관리하는 Synology용 비공개 지도입니다.
 
@@ -29,7 +29,7 @@
   → https://map.lhsstart.synology.me
   → DSM 역방향 프록시·Let's Encrypt 인증서
   → 127.0.0.1:7330
-  → JOY MAP 컨테이너
+  → PRINSS MAP 컨테이너
   → ./data/joy-map.db
 ```
 
