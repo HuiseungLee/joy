@@ -281,6 +281,21 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .route-stop-list { max-height: 88px; }
   .share-confirm-card { bottom: 14px; width: calc(100% - 24px); }
   .topbar { position: sticky; z-index: 10; top: 0; }
+  .drawer {
+    top: auto;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    height: 52dvh;
+    max-height: 560px;
+    overflow: hidden;
+    border-radius: 20px 20px 0 0;
+    box-shadow: 0 -18px 50px rgba(19,34,56,.24);
+    transform: translateY(102%);
+  }
+  .drawer.is-open { transform: translateY(0); }
+  .drawer form { height: 100%; min-height: 0; overflow: auto; }
+  .drawer-header { position: sticky; z-index: 3; top: -26px; margin: -26px -26px 18px; background: rgba(255,253,249,.97); padding: 22px 26px 14px; border-bottom: 1px solid var(--line); }
 }
 
 @media (max-width: 560px) {
@@ -293,6 +308,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .map-actions { top: 12px; right: 12px; }
   .map-action { font-size: .8rem; padding: 9px 11px; }
   .drawer form { padding: 20px; }
+  .drawer { height: 54dvh; }
+  .drawer-header { top: -20px; margin: -20px -20px 16px; padding: 18px 20px 12px; }
   .drawer-actions { bottom: -20px; margin: 14px -20px -20px; padding: 14px 20px 18px; }
   .two-column { grid-template-columns: 1fr; gap: 0; }
   .share-confirm-actions { display: grid; grid-template-columns: 1fr 1fr; }

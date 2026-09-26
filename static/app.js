@@ -57,6 +57,7 @@ const els = {
   areaSearch: $("#area-search"),
   filteredCount: $("#filtered-count"),
   categoryManageButton: $("#category-manage-button"),
+  mapStage: $("#map-stage"),
   map: $("#map"),
   mapMessage: $("#map-message"),
   shareMessageButton: $("#share-message-button"),
@@ -1433,6 +1434,11 @@ function focusMapOnLocation(location, zoom = 16, accountForDrawer = false) {
   }, 280);
 }
 
+function revealMapForMobile() {
+  if (window.innerWidth > 900) return;
+  els.mapStage.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
 function openDrawerForSearch(place, options = {}) {
   const location = place.location.toJSON();
   const region = parseAddressComponents(place.addressComponents || []);
@@ -1513,6 +1519,7 @@ function openDrawerForEdit(place) {
   els.memo.value = place.memo;
   els.deletePlaceButton.hidden = false;
   state.drawerFromShared = false;
+  revealMapForMobile();
   openDrawer();
   if (Number.isFinite(place.latitude) && Number.isFinite(place.longitude) && !place.location_cache_stale) {
     focusMapOnLocation({ lat: place.latitude, lng: place.longitude }, 16, true);
@@ -1681,4 +1688,8 @@ async function refreshStaleLocations() {
   applyFilters(false);
 }
 
-bootstrap();
+if (window.location.protocol === "http:" && !["localhost", "127.0.0.1"].includes(window.location.hostname)) {
+  window.location.replace(`https://${window.location.host}${window.location.pathname}${window.location.search}${window.location.hash}`);
+} else {
+  bootstrap();
+}
