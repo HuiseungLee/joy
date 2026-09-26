@@ -7,7 +7,7 @@
   <meta name="description" content="전 세계의 맛집과 명소를 기록하는 개인 지도">
   <title>JOY MAP</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/app.css?v=20260927-1">
+  <link rel="stylesheet" href="/app.css?v=20260927-2">
 </head>
 <body>
   <section id="login-screen" class="login-screen" aria-labelledby="login-title">
@@ -110,6 +110,7 @@
           <span class="map-shortcuts">PC: 우클릭 · 모바일: 길게 누르기</span>
         </div>
         <section id="place-detail" class="place-detail" aria-labelledby="place-detail-title" hidden>
+          <button id="place-detail-handle" class="mobile-sheet-handle" type="button" aria-label="장소 정보 접기 또는 펼치기"><span></span></button>
           <div class="place-detail-header">
             <div>
               <span id="place-detail-category" class="place-detail-kicker"></span>
@@ -134,6 +135,7 @@
           <button type="button" role="menuitem" data-map-action="save"><span>＋</span>새 장소로 저장</button>
         </div>
         <section id="route-planner" class="route-planner" aria-live="polite" hidden>
+          <button id="route-planner-handle" class="mobile-sheet-handle" type="button" aria-label="경로 정보 접기 또는 펼치기"><span></span></button>
           <div class="route-planner-header">
             <div>
               <span>ROUTE PLANNER</span>
@@ -142,6 +144,10 @@
             <button id="route-clear-button" class="icon-button" type="button" aria-label="경로 선택 해제" title="경로 선택 해제">×</button>
           </div>
           <ol id="route-stop-list" class="route-stop-list"></ol>
+          <div class="route-edit-actions">
+            <button id="route-add-via-button" type="button">＋ 경유지 추가</button>
+            <button id="route-swap-button" type="button">⇅ 출발·도착 교환</button>
+          </div>
           <div class="route-mode-selector" role="group" aria-label="이동수단 선택">
             <button id="route-driving-mode" type="button" aria-pressed="false">🚗 자동차</button>
             <button id="route-transit-mode" class="is-active" type="button" aria-pressed="true">🚇 대중교통</button>
@@ -298,6 +304,6 @@
   </dialog>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="/app.js?v=20260927-1" defer></script>
+  <script src="/app.js?v=20260927-2" defer></script>
 </body>
 </html>

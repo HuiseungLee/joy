@@ -22,11 +22,14 @@ const state = {
   transitItinerary: null,
   routeStartId: null,
   routeDestinationId: null,
+  routeEditTarget: null,
   routeCustomPlaces: new Map(),
   routeCustomMarkers: new Map(),
   nextCustomRouteId: -1,
   manualPreviewMarker: null,
   currentLocationMarker: null,
+  currentLocation: null,
+  currentRoutePlaceId: null,
   projectionOverlay: null,
   contextLocation: null,
   lastContextAt: 0,
@@ -74,6 +77,7 @@ const els = {
   shareMessageButton: $("#share-message-button"),
   currentLocationButton: $("#current-location-button"),
   placeDetail: $("#place-detail"),
+  placeDetailHandle: $("#place-detail-handle"),
   placeDetailClose: $("#place-detail-close"),
   placeDetailCategory: $("#place-detail-category"),
   placeDetailTitle: $("#place-detail-title"),
@@ -88,6 +92,7 @@ const els = {
   shareRetryButton: $("#share-retry-button"),
   shareCancelButton: $("#share-cancel-button"),
   routePlanner: $("#route-planner"),
+  routePlannerHandle: $("#route-planner-handle"),
   routeCount: $("#route-count"),
   routeStopList: $("#route-stop-list"),
   routeStatus: $("#route-status"),
@@ -97,6 +102,8 @@ const els = {
   routeOptimalButton: $("#route-optimal-button"),
   routeDetailsButton: $("#route-details-button"),
   routeClearButton: $("#route-clear-button"),
+  routeAddViaButton: $("#route-add-via-button"),
+  routeSwapButton: $("#route-swap-button"),
   mapLegend: $("#map-legend"),
   drawer: $("#place-drawer"),
   drawerBackdrop: $("#drawer-backdrop"),
@@ -232,6 +239,8 @@ function bindEvents() {
   els.shareMessageButton.addEventListener("click", openShareDialog);
   els.currentLocationButton.addEventListener("click", locateCurrentPosition);
   els.placeDetailClose.addEventListener("click", closePlaceDetail);
+  bindMobileSheet(els.placeDetail, els.placeDetailHandle, "--place-sheet-height", .4);
+  bindMobileSheet(els.routePlanner, els.routePlannerHandle, "--route-sheet-height", .5);
   els.placeDetailEdit.addEventListener("click", editDetailedPlace);
   els.placeDetail.querySelectorAll("[data-place-route-role]").forEach((button) => {
     button.addEventListener("click", () => assignDetailedPlaceToRoute(button.dataset.placeRouteRole));
@@ -246,6 +255,9 @@ function bindEvents() {
   els.routeOptimalButton.addEventListener("click", () => calculateSelectedRoute("optimal"));
   els.routeDetailsButton.addEventListener("click", openTransitDialog);
   els.routeClearButton.addEventListener("click", clearRouteSelection);
+  els.routeAddViaButton.addEventListener("click", () => beginRouteStopEdit("via"));
+  els.routeSwapButton.addEventListener("click", swapRouteEndpoints);
+  els.routeStopList.addEventListener("click", handleRouteStopAction);
   els.drawerBackdrop.addEventListener("click", closeDrawer);
   els.placeForm.addEventListener("submit", savePlace);
   els.shareForm.addEventListener("submit", handleSharedMessage);
@@ -263,6 +275,67 @@ function bindEvents() {
   document.addEventListener("pointerdown", (event) => {
     if (!event.target.closest?.("#map-context-menu")) hideMapContextMenu();
   });
+}
+
+function setMobileSheetHeight(panel, property, fraction) {
+  if (window.innerWidth > 900) {
+    panel.style.removeProperty(property);
+    return;
+  }
+  const stageHeight = Math.max(280, els.mapStage.getBoundingClientRect().height);
+  const height = Math.max(92, Math.min(stageHeight * .78, stageHeight * fraction));
+  panel.style.setProperty(property, `${Math.round(height)}px`);
+}
+
+function bindMobileSheet(panel, handle, property, defaultFraction) {
+  let drag = null;
+  let suppressClickUntil = 0;
+  const snapFractions = [.18, defaultFraction, .76];
+  handle.addEventListener("click", () => {
+    if (Date.now() < suppressClickUntil || window.innerWidth > 900) return;
+    const stageHeight = els.mapStage.getBoundingClientRect().height;
+    const current = panel.getBoundingClientRect().height / stageHeight;
+    const next = current < (snapFractions[0] + snapFractions[1]) / 2
+      ? snapFractions[1]
+      : current < (snapFractions[1] + snapFractions[2]) / 2
+        ? snapFractions[2]
+        : snapFractions[0];
+    setMobileSheetHeight(panel, property, next);
+  });
+  handle.addEventListener("pointerdown", (event) => {
+    if (window.innerWidth > 900) return;
+    drag = {
+      pointerId: event.pointerId,
+      startY: event.clientY,
+      startHeight: panel.getBoundingClientRect().height,
+      moved: false,
+    };
+    handle.setPointerCapture?.(event.pointerId);
+    panel.classList.add("is-dragging");
+  });
+  handle.addEventListener("pointermove", (event) => {
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    const stageHeight = els.mapStage.getBoundingClientRect().height;
+    const delta = drag.startY - event.clientY;
+    if (Math.abs(delta) > 5) drag.moved = true;
+    const height = Math.max(92, Math.min(stageHeight * .78, drag.startHeight + delta));
+    panel.style.setProperty(property, `${Math.round(height)}px`);
+    event.preventDefault();
+  });
+  const finish = (event) => {
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    const stageHeight = els.mapStage.getBoundingClientRect().height;
+    const current = panel.getBoundingClientRect().height / stageHeight;
+    const nearest = snapFractions.reduce((best, value) =>
+      Math.abs(value - current) < Math.abs(best - current) ? value : best
+    );
+    panel.classList.remove("is-dragging");
+    setMobileSheetHeight(panel, property, nearest);
+    if (drag.moved) suppressClickUntil = Date.now() + 400;
+    drag = null;
+  };
+  handle.addEventListener("pointerup", finish);
+  handle.addEventListener("pointercancel", finish);
 }
 
 function handleUiAction(event) {
@@ -414,6 +487,7 @@ function openPlaceDetail(place) {
   els.placeDetailMemo.textContent = place.memo || "저장된 메모가 없습니다.";
   els.placeDetailMemo.classList.toggle("is-empty", !place.memo);
   els.placeDetail.hidden = false;
+  setMobileSheetHeight(els.placeDetail, "--place-sheet-height", .4);
   els.routePlanner.classList.add("is-obscured");
   hideMapContextMenu();
   revealMapForMobile();
@@ -436,10 +510,10 @@ function editDetailedPlace() {
   openDrawerForEdit(place);
 }
 
-function assignDetailedPlaceToRoute(role) {
+async function assignDetailedPlaceToRoute(role) {
   const place = getDetailedPlace();
   if (!place) return;
-  assignRoutePlace(place, role);
+  await assignRoutePlace(place, role);
   closePlaceDetail();
 }
 
@@ -509,7 +583,7 @@ function coordinateRoutePlace(location) {
   return place;
 }
 
-function handleMapContextAction(event) {
+async function handleMapContextAction(event) {
   const button = event.target.closest?.("[data-map-action]");
   if (!button || !state.contextLocation) return;
   const location = state.contextLocation;
@@ -519,41 +593,97 @@ function handleMapContextAction(event) {
     openDrawerForManual(location);
     return;
   }
-  assignRoutePlace(coordinateRoutePlace(location), action);
+  await assignRoutePlace(coordinateRoutePlace(location), action);
 }
 
-function locateCurrentPosition() {
+function requestCurrentPosition() {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(Object.assign(new Error("위치 기능을 지원하지 않습니다."), { code: 0 }));
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(({ coords }) => {
+      resolve({ lat: coords.latitude, lng: coords.longitude });
+    }, reject, { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 });
+  });
+}
+
+function showCurrentLocation(location, focus = true) {
+  state.currentLocation = location;
+  if (state.currentLocationMarker) state.currentLocationMarker.map = null;
+  const markerContent = document.createElement("div");
+  markerContent.className = "current-location-pin";
+  markerContent.setAttribute("aria-label", "내 현재 위치");
+  state.currentLocationMarker = new state.AdvancedMarkerElement({
+    map: state.map,
+    position: location,
+    title: "내 현재 위치",
+    content: markerContent,
+    zIndex: 900,
+  });
+  if (focus) focusMapOnLocation(location, 16);
+}
+
+function currentLocationRoutePlace(location) {
+  let place = state.currentRoutePlaceId === null ? null : state.routeCustomPlaces.get(state.currentRoutePlaceId);
+  if (!place) {
+    const id = state.nextCustomRouteId--;
+    state.currentRoutePlaceId = id;
+    place = {
+      id,
+      provider: "manual",
+      provider_place_id: "route:current-location",
+      label: "내 현재 위치",
+      country_code: location.lat >= 33 && location.lat <= 39.5 && location.lng >= 124 && location.lng <= 132 ? "KR" : "",
+      location_cache_stale: false,
+      category_name: "현위치",
+      category_color: "#1687ff",
+    };
+    state.routeCustomPlaces.set(id, place);
+  }
+  place.latitude = location.lat;
+  place.longitude = location.lng;
+  place.country_code = location.lat >= 33 && location.lat <= 39.5 && location.lng >= 124 && location.lng <= 132 ? "KR" : "";
+  return place;
+}
+
+async function ensureCurrentLocationAsStart() {
+  if (state.routeStartId !== null) return true;
+  try {
+    const location = await requestCurrentPosition();
+    showCurrentLocation(location, false);
+    await assignRoutePlace(currentLocationRoutePlace(location), "start", { autoCurrentStart: false, silent: true });
+    toast("현재 위치를 출발지로 자동 지정했습니다.");
+    return true;
+  } catch (error) {
+    const message = error.code === 1
+      ? "위치 권한이 없어 출발지를 자동 지정하지 못했습니다. 출발지를 직접 선택해 주세요."
+      : "현재 위치를 확인하지 못했습니다. 출발지를 직접 선택해 주세요.";
+    toast(message, true);
+    return false;
+  }
+}
+
+async function locateCurrentPosition() {
   if (!navigator.geolocation || !state.map || !state.AdvancedMarkerElement) {
     toast("이 기기에서는 현위치 기능을 지원하지 않습니다.", true);
     return;
   }
   els.currentLocationButton.disabled = true;
   els.currentLocationButton.textContent = "위치 확인 중…";
-  navigator.geolocation.getCurrentPosition(({ coords }) => {
-    const location = { lat: coords.latitude, lng: coords.longitude };
-    if (state.currentLocationMarker) state.currentLocationMarker.map = null;
-    const markerContent = document.createElement("div");
-    markerContent.className = "current-location-pin";
-    markerContent.setAttribute("aria-label", "내 현재 위치");
-    state.currentLocationMarker = new state.AdvancedMarkerElement({
-      map: state.map,
-      position: location,
-      title: "내 현재 위치",
-      content: markerContent,
-      zIndex: 1200,
-    });
-    focusMapOnLocation(location, 16);
+  try {
+    const location = await requestCurrentPosition();
+    showCurrentLocation(location, true);
     toast("현재 위치를 지도에 표시했습니다.");
-    els.currentLocationButton.disabled = false;
-    els.currentLocationButton.textContent = "◎ 현위치";
-  }, (error) => {
+  } catch (error) {
     const message = error.code === 1
       ? "브라우저 설정에서 위치 권한을 허용해 주세요."
       : "현재 위치를 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.";
     toast(message, true);
+  } finally {
     els.currentLocationButton.disabled = false;
     els.currentLocationButton.textContent = "◎ 현위치";
-  }, { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 });
+  }
 }
 
 function setView(view) {
@@ -957,6 +1087,10 @@ function savedPlaceCard(place) {
   arrow.textContent = "›";
   card.append(dot, content, arrow);
   card.addEventListener("click", () => {
+    if (state.routeEditTarget) {
+      void applyRouteEditSelection(place);
+      return;
+    }
     selectPlace(place);
     openPlaceDetail(place);
   });
@@ -1005,6 +1139,10 @@ function renderMarkers(fitMap = false) {
       pin.addEventListener("mouseleave", () => state.hoverInfoWindow?.close());
     }
     marker.addEventListener("gmp-click", () => {
+      if (state.routeEditTarget) {
+        void applyRouteEditSelection(place);
+        return;
+      }
       selectPlace(place);
       openPlaceDetail(place);
     });
@@ -1038,17 +1176,35 @@ function removeRoutePlaceId(id) {
   if (state.routeDestinationId === id) state.routeDestinationId = null;
 }
 
-function assignRoutePlace(place, role) {
+async function assignRoutePlace(place, role, options = {}) {
   if (!Number.isFinite(place.latitude) || !Number.isFinite(place.longitude) || place.location_cache_stale) {
     toast("좌표가 확인된 장소만 경로에 추가할 수 있습니다.", true);
-    return;
+    return false;
   }
-  if (!(["start", "via", "destination"].includes(role))) return;
+  if (!(["start", "via", "destination"].includes(role))) return false;
+  if (role === "destination" && state.routeStartId === null && options.autoCurrentStart !== false) {
+    await ensureCurrentLocationAsStart();
+  }
+  if (role === "destination" && place.id === state.routeStartId) {
+    toast("출발지와 도착지는 서로 다른 장소로 지정해 주세요.", true);
+    return false;
+  }
+  if (role === "start" && place.id === state.routeDestinationId) {
+    toast("출발지와 도착지는 서로 다른 장소로 지정해 주세요.", true);
+    return false;
+  }
+  if (role === "via" && (place.id === state.routeStartId || place.id === state.routeDestinationId)) {
+    toast("이미 출발지 또는 도착지로 지정된 장소입니다.", true);
+    return false;
+  }
   if (!state.routePlaceIds.includes(place.id) && state.routePlaceIds.length >= 27) {
     toast("한 경로에는 최대 27곳까지 선택할 수 있습니다.", true);
-    return;
+    return false;
   }
   clearRouteDrawing();
+  const replacementId = Number.isFinite(options.replaceId) ? options.replaceId : null;
+  const replacementIndex = replacementId === null ? -1 : state.routePlaceIds.indexOf(replacementId);
+  if (replacementId !== null && replacementId !== place.id) removeRoutePlaceId(replacementId);
   removeRoutePlaceId(place.id);
   if (role === "start") {
     if (state.routeStartId !== null) removeRoutePlaceId(state.routeStartId);
@@ -1059,16 +1215,77 @@ function assignRoutePlace(place, role) {
     state.routePlaceIds.push(place.id);
     state.routeDestinationId = place.id;
   } else {
-    const destinationIndex = state.routeDestinationId === null
-      ? -1
-      : state.routePlaceIds.indexOf(state.routeDestinationId);
-    if (destinationIndex >= 0) state.routePlaceIds.splice(destinationIndex, 0, place.id);
-    else state.routePlaceIds.push(place.id);
+    if (replacementIndex >= 0) {
+      const destinationIndex = state.routeDestinationId === null ? state.routePlaceIds.length : state.routePlaceIds.indexOf(state.routeDestinationId);
+      state.routePlaceIds.splice(Math.min(replacementIndex, destinationIndex < 0 ? state.routePlaceIds.length : destinationIndex), 0, place.id);
+    } else {
+      const destinationIndex = state.routeDestinationId === null
+        ? -1
+        : state.routePlaceIds.indexOf(state.routeDestinationId);
+      if (destinationIndex >= 0) state.routePlaceIds.splice(destinationIndex, 0, place.id);
+      else state.routePlaceIds.push(place.id);
+    }
   }
+  state.routeEditTarget = null;
   updateRouteSelectionVisuals();
   renderRoutePlanner(true);
   const roleLabel = role === "start" ? "출발지" : role === "destination" ? "도착지" : "경유지";
-  toast(`${place.label}을(를) ${roleLabel}로 지정했습니다.`);
+  if (!options.silent) toast(`${place.label}을(를) ${roleLabel}로 지정했습니다.`);
+  return true;
+}
+
+function beginRouteStopEdit(role, replaceId = null) {
+  if (!(["start", "via", "destination"].includes(role))) return;
+  state.routeEditTarget = { role, replaceId: Number.isFinite(replaceId) ? replaceId : null };
+  closePlaceDetail();
+  renderRoutePlanner(false);
+  const roleLabel = role === "start" ? "출발지" : role === "destination" ? "도착지" : "경유지";
+  els.routeStatus.textContent = `변경할 ${roleLabel}를 지도나 저장 장소 목록에서 선택하세요.`;
+  toast(`${roleLabel}로 사용할 장소를 선택해 주세요.`);
+}
+
+async function applyRouteEditSelection(place) {
+  const target = state.routeEditTarget;
+  if (!target) return false;
+  return assignRoutePlace(place, target.role, { replaceId: target.replaceId, autoCurrentStart: true });
+}
+
+function removeRouteStop(id) {
+  if (!Number.isFinite(id) || !state.routePlaceIds.includes(id)) return;
+  clearRouteDrawing();
+  removeRoutePlaceId(id);
+  if (state.routeCustomPlaces.has(id) && id !== state.currentRoutePlaceId) state.routeCustomPlaces.delete(id);
+  state.routeEditTarget = null;
+  updateRouteSelectionVisuals();
+  renderRoutePlanner(true);
+  toast("경로에서 지점을 삭제했습니다.");
+}
+
+function swapRouteEndpoints() {
+  if (state.routeStartId === null || state.routeDestinationId === null) {
+    toast("출발지와 도착지를 모두 지정한 뒤 교환할 수 있습니다.", true);
+    return;
+  }
+  clearRouteDrawing();
+  const oldStart = state.routeStartId;
+  const oldDestination = state.routeDestinationId;
+  const vias = state.routePlaceIds.filter((id) => id !== oldStart && id !== oldDestination);
+  state.routeStartId = oldDestination;
+  state.routeDestinationId = oldStart;
+  state.routePlaceIds = [oldDestination, ...vias, oldStart];
+  state.routeEditTarget = null;
+  updateRouteSelectionVisuals();
+  renderRoutePlanner(true);
+  toast("출발지와 도착지를 교환했습니다.");
+}
+
+function handleRouteStopAction(event) {
+  const button = event.target.closest?.("[data-route-action]");
+  if (!button) return;
+  const id = Number(button.dataset.routeId);
+  const role = button.dataset.routeRole;
+  if (button.dataset.routeAction === "edit") beginRouteStopEdit(role, Number.isFinite(id) ? id : null);
+  else if (button.dataset.routeAction === "remove") removeRouteStop(id);
 }
 
 function updateRouteSelectionVisuals() {
@@ -1094,28 +1311,64 @@ function updateRouteSelectionVisuals() {
 }
 
 function renderRoutePlanner(resetStatus = false) {
+  const wasHidden = els.routePlanner.hidden;
   const visualIds = getRouteVisualIds();
-  els.routePlanner.hidden = state.routePlaceIds.length === 0;
+  els.routePlanner.hidden = state.routePlaceIds.length === 0 && !state.routeEditTarget;
+  if (wasHidden && !els.routePlanner.hidden) setMobileSheetHeight(els.routePlanner, "--route-sheet-height", .5);
   els.routeCount.textContent = `경로 지점 ${state.routePlaceIds.length}곳`;
   els.routeStopList.replaceChildren();
-  visualIds.forEach((id, index) => {
-    const place = getRoutePlaceById(id);
-    if (!place) return;
+  const viaIds = visualIds.filter((id) => id !== state.routeStartId && id !== state.routeDestinationId);
+  const stops = [
+    { role: "start", id: state.routeStartId, emptyLabel: "출발지 선택" },
+    ...viaIds.map((id) => ({ role: "via", id, emptyLabel: "경유지 선택" })),
+    { role: "destination", id: state.routeDestinationId, emptyLabel: "도착지 선택" },
+  ];
+  stops.forEach(({ role, id, emptyLabel }) => {
+    const place = id === null ? null : getRoutePlaceById(id);
     const item = document.createElement("li");
-    const number = document.createElement("span");
-    number.textContent = id === state.routeStartId ? "출" : id === state.routeDestinationId ? "도" : "경";
+    item.className = `route-stop-row is-${role}`;
+    if (state.routeEditTarget?.role === role && (state.routeEditTarget.replaceId === id || state.routeEditTarget.replaceId === null)) {
+      item.classList.add("is-editing");
+    }
+    const marker = document.createElement("span");
+    marker.className = "route-stop-marker";
     const name = document.createElement("strong");
-    name.textContent = place.label;
-    item.append(number, name);
+    name.textContent = place?.label || emptyLabel;
+    if (!place) name.classList.add("is-empty");
+    const actions = document.createElement("span");
+    actions.className = "route-stop-actions";
+    const edit = document.createElement("button");
+    edit.type = "button";
+    edit.dataset.routeAction = "edit";
+    edit.dataset.routeRole = role;
+    if (id !== null) edit.dataset.routeId = String(id);
+    edit.textContent = place ? "변경" : "선택";
+    actions.appendChild(edit);
+    if (place) {
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.dataset.routeAction = "remove";
+      remove.dataset.routeRole = role;
+      remove.dataset.routeId = String(id);
+      remove.setAttribute("aria-label", `${place.label} 경로에서 삭제`);
+      remove.textContent = "×";
+      actions.appendChild(remove);
+    }
+    item.append(marker, name, actions);
     els.routeStopList.appendChild(item);
   });
   const hasEnough = state.routePlaceIds.length >= 2 && state.routeStartId !== null && state.routeDestinationId !== null;
+  els.routeAddViaButton.disabled = state.routePlaceIds.length >= 27;
+  els.routeAddViaButton.classList.toggle("is-active", state.routeEditTarget?.role === "via" && state.routeEditTarget.replaceId === null);
+  els.routeSwapButton.disabled = state.routeStartId === null || state.routeDestinationId === null;
   els.routeOrderedButton.disabled = !hasEnough;
   els.routeOptimalButton.disabled = !hasEnough || state.routePlaceIds.length > 10;
   els.routeOptimalButton.title = state.routePlaceIds.length > 10 ? "경유지 최적화는 최대 10곳까지 지원합니다." : "";
   if (resetStatus) {
     const travelModeLabel = getTravelModeLabel();
-    els.routeStatus.textContent = !hasEnough
+    els.routeStatus.textContent = state.routeEditTarget
+      ? "지도나 저장 장소 목록에서 변경할 지점을 선택하세요."
+      : !hasEnough
       ? "장소 상세 또는 지도 메뉴에서 출발지와 도착지를 지정하세요."
       : state.routePlaceIds.length > 10
         ? "지정 순서 경로는 가능하지만 경유지 최적화는 최대 10곳입니다."
@@ -1155,9 +1408,11 @@ function clearRouteSelection() {
   state.routePlaceIds = [];
   state.routeStartId = null;
   state.routeDestinationId = null;
+  state.routeEditTarget = null;
   state.routeCustomMarkers.forEach((marker) => { marker.map = null; });
   state.routeCustomMarkers.clear();
   state.routeCustomPlaces.clear();
+  state.currentRoutePlaceId = null;
   updateRouteSelectionVisuals();
   renderRoutePlanner(true);
 }
