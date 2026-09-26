@@ -536,7 +536,8 @@ def request_kakao_api(path: str, *, params: dict | None = None, payload: dict | 
                 detail = error_payload.get("msg") or error_payload.get("message")
                 code = error_payload.get("code")
                 if detail:
-                    kakao_detail = f" 카카오 응답: {detail}"
+                    safe_detail = re.sub(r"appKey\([^)]*\)", "appKey(숨김)", str(detail), flags=re.IGNORECASE)
+                    kakao_detail = f" 카카오 응답: {safe_detail}"
                     if code is not None:
                         kakao_detail += f" (code {code})"
         except (UnicodeDecodeError, json.JSONDecodeError):
