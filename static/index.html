@@ -7,7 +7,7 @@
   <meta name="description" content="전 세계의 맛집과 명소를 기록하는 개인 지도">
   <title>JOY MAP</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/app.css?v=20260927-3">
+  <link rel="stylesheet" href="/app.css?v=20260927-4">
 </head>
 <body>
   <section id="login-screen" class="login-screen" aria-labelledby="login-title">
@@ -64,7 +64,7 @@
 
         <div class="view-tabs" role="tablist" aria-label="목록 보기">
           <button id="saved-tab" class="tab is-active" type="button" role="tab" aria-selected="true">저장한 장소</button>
-          <button id="search-tab" class="tab" type="button" role="tab" aria-selected="false">검색 결과</button>
+          <button id="search-tab" class="tab" type="button" role="tab" aria-selected="false">SNS 장소찾기</button>
         </div>
 
         <section id="saved-view" class="panel-view" aria-labelledby="saved-tab">
@@ -93,8 +93,20 @@
         </section>
 
         <section id="search-view" class="panel-view" aria-labelledby="search-tab" hidden>
-          <div id="search-status" class="inline-status">장소를 검색해 지도에 추가하세요.</div>
-          <div id="search-results" class="place-list" aria-live="polite"></div>
+          <form id="share-form" class="sns-place-form">
+            <div class="sns-place-heading">
+              <p class="eyebrow">SNS PLACE FINDER</p>
+              <h2>SNS 공유문으로 장소 찾기</h2>
+              <p>카카오톡이나 지도 앱에서 받은 장소 공유문 전체를 붙여 넣으세요.</p>
+            </div>
+            <label class="field">
+              <span>공유문 붙여넣기</span>
+              <textarea id="share-message" maxlength="5000" rows="10" required placeholder="[네이버지도]&#10;유성왕수산&#10;대전 유성구 대학로 35 유성왕수산&#10;https://naver.me/..."></textarea>
+            </label>
+            <p class="policy-note">장소명과 주소를 추출하여 지도에서 위치를 찾습니다. 저장 전 지도에서 검색된 지점을 확인할 수 있습니다.</p>
+            <p id="share-status" class="inline-status compact-status" hidden></p>
+            <button class="primary-button sns-place-submit" type="submit">SNS 장소 찾기</button>
+          </form>
         </section>
       </aside>
 
@@ -105,7 +117,6 @@
           <span>환경변수에 API 키를 등록한 뒤 다시 시작해 주세요.</span>
         </div>
         <div class="map-actions">
-          <button id="share-message-button" class="map-action secondary-map-action" type="button">⌁ 공유문 붙여넣기</button>
           <button id="current-location-button" class="map-action secondary-map-action" type="button">◎ 현위치</button>
           <span class="map-shortcuts">PC: 우클릭 · 모바일: 길게 누르기</span>
         </div>
@@ -254,28 +265,6 @@
     </form>
   </aside>
 
-  <dialog id="share-dialog" class="dialog share-dialog">
-    <form id="share-form">
-      <div class="dialog-header">
-        <div>
-          <p class="eyebrow">PASTE A SHARED PLACE</p>
-          <h2>공유문으로 장소 찾기</h2>
-        </div>
-        <button id="share-dialog-close" class="icon-button" type="button" aria-label="공유문 창 닫기" data-ui-action="close-share-dialog">×</button>
-      </div>
-      <label class="field">
-        <span>카카오톡·지도 공유문</span>
-        <textarea id="share-message" maxlength="5000" rows="9" required placeholder="[네이버지도]&#10;유성왕수산&#10;대전 유성구 대학로 35 유성왕수산&#10;https://naver.me/..."></textarea>
-      </label>
-      <p class="policy-note">장소명과 주소를 추출해 Google 지도에서 가장 가까운 결과를 찾습니다. 저장하기 전에 검색 결과를 확인해 주세요.</p>
-      <p id="share-status" class="inline-status compact-status" hidden></p>
-      <div class="dialog-actions dialog-actions-split">
-        <button id="share-dialog-cancel" class="secondary-button" type="button" data-ui-action="close-share-dialog">취소</button>
-        <button class="primary-button" type="submit">장소 찾기</button>
-      </div>
-    </form>
-  </dialog>
-
   <dialog id="category-dialog" class="dialog">
     <form id="category-form" method="dialog">
       <div class="dialog-header">
@@ -294,6 +283,6 @@
   </dialog>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="/app.js?v=20260927-3" defer></script>
+  <script src="/app.js?v=20260927-4" defer></script>
 </body>
 </html>

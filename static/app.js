@@ -6,7 +6,6 @@ const state = {
   categories: [],
   places: [],
   filteredPlaces: [],
-  searchResults: [],
   config: null,
   map: null,
   AdvancedMarkerElement: null,
@@ -63,8 +62,6 @@ const els = {
   savedView: $("#saved-view"),
   searchView: $("#search-view"),
   savedList: $("#saved-list"),
-  searchResults: $("#search-results"),
-  searchStatus: $("#search-status"),
   categoryFilter: $("#category-filter"),
   scopeFilter: $("#scope-filter"),
   monthFilter: $("#month-filter"),
@@ -75,7 +72,6 @@ const els = {
   mapStage: $("#map-stage"),
   map: $("#map"),
   mapMessage: $("#map-message"),
-  shareMessageButton: $("#share-message-button"),
   currentLocationButton: $("#current-location-button"),
   placeDetail: $("#place-detail"),
   placeDetailHandle: $("#place-detail-handle"),
@@ -133,10 +129,7 @@ const els = {
   memo: $("#memo"),
   deletePlaceButton: $("#delete-place-button"),
   cancelPlaceButton: $("#cancel-place-button"),
-  shareDialog: $("#share-dialog"),
   shareForm: $("#share-form"),
-  shareDialogClose: $("#share-dialog-close"),
-  shareDialogCancel: $("#share-dialog-cancel"),
   shareMessage: $("#share-message"),
   shareStatus: $("#share-status"),
   categoryDialog: $("#category-dialog"),
@@ -237,7 +230,6 @@ function bindEvents() {
     element.addEventListener("change", () => applyFilters(false));
   });
   els.areaSearch.addEventListener("input", () => applyFilters(false));
-  els.shareMessageButton.addEventListener("click", openShareDialog);
   els.currentLocationButton.addEventListener("click", locateCurrentPosition);
   els.placeDetailClose.addEventListener("click", closePlaceDetail);
   bindMobileSheet(els.placeDetail, els.placeDetailHandle, "--place-sheet-height", .4);
@@ -348,9 +340,6 @@ function handleUiAction(event) {
   if (action === "close-drawer") {
     event.preventDefault();
     closeDrawer();
-  } else if (action === "close-share-dialog") {
-    event.preventDefault();
-    if (els.shareDialog.open) els.shareDialog.close();
   } else if (action === "close-category-dialog") {
     event.preventDefault();
     if (els.categoryDialog.open) els.categoryDialog.close();
@@ -709,11 +698,9 @@ async function handleSearch(event) {
     toast("Google 지도 API 설정을 먼저 완료해 주세요.", true);
     return;
   }
-  setView("search");
-  els.searchStatus.hidden = false;
-  els.searchStatus.className = "inline-status is-loading";
-  els.searchStatus.textContent = "Google Maps에서 장소를 찾는 중…";
-  els.searchResults.replaceChildren();
+  const submit = els.searchForm.querySelector("button[type='submit']");
+  submit.disabled = true;
+  toast("Google Maps에서 장소를 찾는 중…");
   try {
     const request = {
       textQuery: query,
@@ -722,45 +709,25 @@ async function handleSearch(event) {
     const languageRegion = (navigator.language.split("-")[1] || "").toLowerCase();
     if (/^[a-z]{2}$/.test(languageRegion)) request.region = languageRegion;
     const { places = [] } = await state.Place.searchByText(request);
-    state.searchResults = places.filter((place) => place.id && place.location);
-    renderSearchResults();
+    const match = places.find((place) => place.id && place.location);
+    if (!match) {
+      toast("검색 결과가 없습니다. 도시명과 장소명을 함께 입력해 보세요.", true);
+      return;
+    }
+    showSharedPlacePreview(match, {
+      raw: query,
+      name: match.displayName || query,
+      address: match.formattedAddress || "",
+      query,
+    }, { source: "search" });
+    revealMapForMobile();
+    toast("지도에서 검색된 위치를 확인해 주세요.");
   } catch (error) {
     console.error(error);
-    els.searchStatus.className = "inline-status";
-    els.searchStatus.textContent = "검색하지 못했습니다. API 설정과 사용 한도를 확인해 주세요.";
+    toast("검색하지 못했습니다. API 설정과 사용 한도를 확인해 주세요.", true);
+  } finally {
+    submit.disabled = false;
   }
-}
-
-function renderSearchResults() {
-  els.searchResults.replaceChildren();
-  els.searchStatus.className = "inline-status";
-  if (!state.searchResults.length) {
-    els.searchStatus.hidden = false;
-    els.searchStatus.textContent = "검색 결과가 없습니다. 도시명과 장소명을 함께 입력해 보세요.";
-    return;
-  }
-  els.searchStatus.hidden = true;
-  state.searchResults.forEach((place) => {
-    const card = document.createElement("button");
-    card.type = "button";
-    card.className = "place-card";
-    const dot = document.createElement("span");
-    dot.className = "category-dot";
-    dot.style.setProperty("--category-color", "#2d6cdf");
-    const content = document.createElement("span");
-    const name = document.createElement("strong");
-    name.textContent = place.displayName || "이름 없는 장소";
-    const address = document.createElement("span");
-    address.className = "place-card-meta";
-    address.textContent = place.formattedAddress || "주소 정보 없음";
-    content.append(name, address);
-    const arrow = document.createElement("span");
-    arrow.className = "place-card-arrow";
-    arrow.textContent = "+";
-    card.append(dot, content, arrow);
-    card.addEventListener("click", () => openDrawerForSearch(place));
-    els.searchResults.appendChild(card);
-  });
 }
 
 function parseAddressComponents(components = []) {
@@ -803,15 +770,15 @@ function parseSharedPlaceMessage(value) {
   return { raw, name, address, url, query: [name, address].filter(Boolean).join(" ") };
 }
 
-function openShareDialog(options = {}) {
+function openSnsFinder(options = {}) {
   if (!options.preserveMessage) {
     clearSharePreview();
     els.shareForm.reset();
   }
   els.shareStatus.hidden = true;
   els.shareStatus.className = "inline-status compact-status";
-  els.shareDialog.showModal();
-  els.shareMessage.focus();
+  setView("search");
+  window.setTimeout(() => els.shareMessage.focus(), 50);
 }
 
 async function handleSharedMessage(event) {
@@ -849,8 +816,8 @@ async function handleSharedMessage(event) {
     const bestMatch = matches.find((place) =>
       (place.displayName || "").replace(/\s+/g, "").toLocaleLowerCase("ko") === normalizedName
     ) || matches[0];
-    els.shareDialog.close();
     showSharedPlacePreview(bestMatch, parsed);
+    revealMapForMobile();
     toast("지도에서 검색된 위치를 확인해 주세요.");
   } catch (error) {
     console.error(error);
@@ -861,7 +828,7 @@ async function handleSharedMessage(event) {
   }
 }
 
-function showSharedPlacePreview(place, parsed) {
+function showSharedPlacePreview(place, parsed, options = {}) {
   clearSharePreview();
   const location = place.location.toJSON();
   const pin = document.createElement("div");
@@ -876,7 +843,7 @@ function showSharedPlacePreview(place, parsed) {
     content: pin,
     zIndex: 1000,
   });
-  state.pendingSharedPlace = { place, parsed };
+  state.pendingSharedPlace = { place, parsed, source: options.source || "sns" };
   els.shareConfirmName.textContent = place.displayName || parsed.name;
   els.shareConfirmAddress.textContent = place.formattedAddress || parsed.address || "주소 정보 없음";
   els.shareConfirmCard.hidden = false;
@@ -891,16 +858,26 @@ function clearSharePreview() {
 }
 
 function retrySharedPlaceSearch() {
-  const message = state.pendingSharedPlace?.parsed.raw || els.shareMessage.value;
+  const pending = state.pendingSharedPlace;
+  const message = pending?.parsed.raw || els.shareMessage.value;
   clearSharePreview();
+  if (pending?.source === "search") {
+    els.searchInput.value = message;
+    els.searchInput.focus();
+    return;
+  }
   els.shareMessage.value = message;
-  openShareDialog({ preserveMessage: true });
+  openSnsFinder({ preserveMessage: true });
 }
 
 function confirmSharedPlace() {
   const pending = state.pendingSharedPlace;
   if (!pending) return;
   els.shareConfirmCard.hidden = true;
+  if (pending.source === "search") {
+    openDrawerForSearch(pending.place);
+    return;
+  }
   openDrawerForSearch(pending.place, {
     label: pending.parsed.name,
     memo: pending.parsed.raw,

@@ -131,6 +131,13 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .empty-state strong { display: block; margin-bottom: 7px; color: var(--ink); font: 700 1.18rem/1.3 Georgia, serif; }
 .inline-status { margin: 18px; border: 1px dashed var(--line-dark); border-radius: 10px; padding: 14px; color: var(--ink-soft); font-size: .84rem; }
 .inline-status.is-loading::before { content: ""; display: inline-block; width: 12px; height: 12px; margin-right: 8px; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -2px; }
+.sns-place-form { padding: 22px 20px 28px; }
+.sns-place-heading { margin-bottom: 20px; }
+.sns-place-heading h2 { margin: 5px 0 8px; font: 700 1.35rem/1.25 Georgia, serif; letter-spacing: -.03em; }
+.sns-place-heading > p:last-child { margin: 0; color: var(--ink-soft); font-size: .82rem; line-height: 1.55; }
+.sns-place-form textarea { min-height: 210px; resize: vertical; }
+.sns-place-form .compact-status { margin: 12px 0; }
+.sns-place-submit { width: 100%; }
 
 .map-stage { position: relative; min-width: 0; background: #dfe5e8; }
 .map { position: absolute; inset: 0; }
@@ -193,8 +200,6 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .dialog { width: min(440px, calc(100% - 28px)); border: 0; border-radius: 16px; background: var(--panel); padding: 0; box-shadow: var(--shadow); color: var(--ink); }
 .dialog::backdrop { background: rgba(19,34,56,.35); backdrop-filter: blur(3px); }
 .dialog form { padding: 24px; }
-.share-dialog { width: min(560px, calc(100% - 28px)); }
-.share-dialog textarea { min-height: 190px; }
 .compact-status { margin: 10px 0 0; }
 .dialog-actions-split { justify-content: space-between; gap: 10px; }
 .color-field input { min-height: 48px; padding: 5px; }
