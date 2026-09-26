@@ -7,7 +7,7 @@
   <meta name="description" content="전 세계의 맛집과 명소를 기록하는 개인 지도">
   <title>JOY MAP</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/app.css?v=20260926-2">
+  <link rel="stylesheet" href="/app.css?v=20260927-1">
 </head>
 <body>
   <section id="login-screen" class="login-screen" aria-labelledby="login-title">
@@ -106,7 +106,32 @@
         </div>
         <div class="map-actions">
           <button id="share-message-button" class="map-action secondary-map-action" type="button">⌁ 공유문 붙여넣기</button>
-          <span class="map-shortcuts">우클릭: 직접 지정 · Ctrl+클릭: 경로 선택</span>
+          <button id="current-location-button" class="map-action secondary-map-action" type="button">◎ 현위치</button>
+          <span class="map-shortcuts">PC: 우클릭 · 모바일: 길게 누르기</span>
+        </div>
+        <section id="place-detail" class="place-detail" aria-labelledby="place-detail-title" hidden>
+          <div class="place-detail-header">
+            <div>
+              <span id="place-detail-category" class="place-detail-kicker"></span>
+              <h2 id="place-detail-title"></h2>
+            </div>
+            <button id="place-detail-close" class="icon-button" type="button" aria-label="장소 상세 닫기">×</button>
+          </div>
+          <p id="place-detail-location" class="place-detail-location"></p>
+          <p id="place-detail-memo" class="place-detail-memo"></p>
+          <div class="place-detail-route-actions" aria-label="경로 지점으로 지정">
+            <button type="button" data-place-route-role="start"><span>●</span> 출발</button>
+            <button type="button" data-place-route-role="via"><span>◆</span> 경유</button>
+            <button type="button" data-place-route-role="destination"><span>●</span> 도착</button>
+          </div>
+          <button id="place-detail-edit" class="place-detail-edit" type="button">✎ 저장 정보 수정</button>
+        </section>
+        <div id="map-context-menu" class="map-context-menu" role="menu" aria-label="지도 위치 메뉴" hidden>
+          <div class="map-context-heading">이 위치에서</div>
+          <button type="button" role="menuitem" data-map-action="start"><span class="context-dot start"></span>출발로 지정</button>
+          <button type="button" role="menuitem" data-map-action="via"><span class="context-dot via"></span>경유로 지정</button>
+          <button type="button" role="menuitem" data-map-action="destination"><span class="context-dot destination"></span>도착으로 지정</button>
+          <button type="button" role="menuitem" data-map-action="save"><span>＋</span>새 장소로 저장</button>
         </div>
         <section id="route-planner" class="route-planner" aria-live="polite" hidden>
           <div class="route-planner-header">
@@ -121,10 +146,10 @@
             <button id="route-driving-mode" type="button" aria-pressed="false">🚗 자동차</button>
             <button id="route-transit-mode" class="is-active" type="button" aria-pressed="true">🚇 대중교통</button>
           </div>
-          <p id="route-status" class="route-status">Ctrl을 누른 채 장소를 2곳 이상 선택하세요.</p>
+          <p id="route-status" class="route-status">장소 상세에서 출발지와 도착지를 지정하세요.</p>
           <div class="route-planner-actions">
-            <button id="route-ordered-button" class="secondary-button" type="button">① 클릭 순서</button>
-            <button id="route-optimal-button" class="primary-button" type="button">② 순서 무관 최적</button>
+            <button id="route-ordered-button" class="secondary-button" type="button">① 지정 순서</button>
+            <button id="route-optimal-button" class="primary-button" type="button">② 경유지 최적화</button>
           </div>
           <button id="route-details-button" class="route-details-button" type="button" hidden>대중교통 이용 방법 다시 보기</button>
         </section>
@@ -240,13 +265,17 @@
   <dialog id="category-dialog" class="dialog">
     <form id="category-form" method="dialog">
       <div class="dialog-header">
-        <div><p class="eyebrow">ORGANIZE</p><h2>카테고리 추가</h2></div>
+        <div><p class="eyebrow">ORGANIZE</p><h2 id="category-dialog-title">카테고리 관리</h2></div>
         <button id="category-dialog-close" class="icon-button" type="button" aria-label="카테고리 창 닫기" data-ui-action="close-category-dialog">×</button>
       </div>
+      <input id="category-id" type="hidden">
       <label class="field"><span>이름</span><input id="category-name" maxlength="30" required placeholder="카페, 숙소, 쇼핑…"></label>
       <label class="field color-field"><span>표시 색상</span><input id="category-color" type="color" value="#7B5CFA"></label>
       <div id="category-list" class="category-list"></div>
-      <div class="dialog-actions"><button class="primary-button" type="submit">추가</button></div>
+      <div class="dialog-actions">
+        <button id="category-edit-cancel" class="secondary-button" type="button" hidden>수정 취소</button>
+        <button id="category-submit" class="primary-button" type="submit">추가</button>
+      </div>
     </form>
   </dialog>
 
@@ -269,6 +298,6 @@
   </dialog>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="/app.js?v=20260926-2" defer></script>
+  <script src="/app.js?v=20260927-1" defer></script>
 </body>
 </html>

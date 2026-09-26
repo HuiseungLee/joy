@@ -91,6 +91,40 @@ class JoyMapDatabaseTests(unittest.TestCase):
             })
         self.assertEqual(caught.exception.status, 400)
 
+    def test_category_create_update_and_delete(self):
+        created = app.create_category({"name": "카페", "color": "#123456"})
+        updated = app.update_category(created["id"], {"name": "디저트", "color": "#ABCDEF"})
+        self.assertEqual(updated["name"], "디저트")
+        self.assertEqual(updated["color"], "#ABCDEF")
+        app.delete_category(created["id"])
+        self.assertNotIn(created["id"], [category["id"] for category in app.list_categories()])
+
+    def test_category_in_use_cannot_be_deleted(self):
+        category = app.list_categories()[0]
+        app.create_place({
+            "provider": "manual",
+            "provider_place_id": "manual:category-use",
+            "label": "카테고리 사용 장소",
+            "category_id": category["id"],
+            "latitude": 37.5,
+            "longitude": 127.0,
+        })
+        with self.assertRaises(app.ApiError) as caught:
+            app.delete_category(category["id"])
+        self.assertEqual(caught.exception.status, 409)
+
+    def test_optimized_route_keeps_start_and_destination(self):
+        costs = [
+            [0, 1, 8, 9],
+            [9, 0, 1, 5],
+            [9, 4, 0, 1],
+            [1, 9, 9, 0],
+        ]
+        order = app.optimal_open_route_order(costs)
+        self.assertEqual(order[0], 0)
+        self.assertEqual(order[-1], 3)
+        self.assertEqual(set(order), {0, 1, 2, 3})
+
     def test_signed_session_expiry_and_tampering(self):
         token = app.make_session_token("tester")
         self.assertEqual(app.verify_session_token(token), "tester")

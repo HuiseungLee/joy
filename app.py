@@ -185,14 +185,15 @@ def init_database() -> None:
         if "planned_month" not in place_columns:
             db.execute("ALTER TABLE places ADD COLUMN planned_month INTEGER")
         db.execute("CREATE INDEX IF NOT EXISTS idx_places_planned_month ON places(planned_month)")
-        now = iso_now()
-        db.executemany(
-            "INSERT OR IGNORE INTO categories(slug, name, color, created_at) VALUES (?, ?, ?, ?)",
-            [
-                ("restaurant", "맛집", "#E85D3F", now),
-                ("attraction", "명소", "#2D6CDF", now),
-            ],
-        )
+        if db.execute("SELECT COUNT(*) FROM categories").fetchone()[0] == 0:
+            now = iso_now()
+            db.executemany(
+                "INSERT INTO categories(slug, name, color, created_at) VALUES (?, ?, ?, ?)",
+                [
+                    ("restaurant", "맛집", "#E85D3F", now),
+                    ("attraction", "명소", "#2D6CDF", now),
+                ],
+            )
 
 
 def text(value: object, limit: int, field: str, required: bool = False) -> str:
@@ -262,13 +263,41 @@ def create_category(data: dict) -> dict:
     return dict(row)
 
 
+def update_category(category_id: int, data: dict) -> dict:
+    name = text(data.get("name"), 30, "카테고리 이름", required=True)
+    color = text(data.get("color"), 7, "색상", required=True)
+    if not COLOR_RE.fullmatch(color):
+        raise ApiError(HTTPStatus.BAD_REQUEST, "색상은 #RRGGBB 형식이어야 합니다.")
+    try:
+        with DB_LOCK, database() as db:
+            existing = db.execute("SELECT id FROM categories WHERE id = ?", (category_id,)).fetchone()
+            if not existing:
+                raise ApiError(HTTPStatus.NOT_FOUND, "카테고리를 찾을 수 없습니다.")
+            db.execute(
+                "UPDATE categories SET name = ?, color = ? WHERE id = ?",
+                (name, color.upper(), category_id),
+            )
+            row = db.execute(
+                """
+                SELECT c.*, COUNT(p.id) AS place_count
+                FROM categories c LEFT JOIN places p ON p.category_id = c.id
+                WHERE c.id = ? GROUP BY c.id
+                """,
+                (category_id,),
+            ).fetchone()
+    except sqlite3.IntegrityError:
+        raise ApiError(HTTPStatus.CONFLICT, "같은 이름의 카테고리가 이미 있습니다.") from None
+    return dict(row)
+
+
 def delete_category(category_id: int) -> None:
     with DB_LOCK, database() as db:
-        row = db.execute("SELECT slug FROM categories WHERE id = ?", (category_id,)).fetchone()
+        row = db.execute("SELECT id FROM categories WHERE id = ?", (category_id,)).fetchone()
         if not row:
             raise ApiError(HTTPStatus.NOT_FOUND, "카테고리를 찾을 수 없습니다.")
-        if row["slug"] in {"restaurant", "attraction"}:
-            raise ApiError(HTTPStatus.CONFLICT, "기본 카테고리는 삭제할 수 없습니다.")
+        category_count = db.execute("SELECT COUNT(*) FROM categories").fetchone()[0]
+        if category_count <= 1:
+            raise ApiError(HTTPStatus.CONFLICT, "마지막 카테고리는 삭제할 수 없습니다.")
         try:
             db.execute("DELETE FROM categories WHERE id = ?", (category_id,))
         except sqlite3.IntegrityError:
@@ -625,18 +654,22 @@ def kakao_route_costs(points: list[dict]) -> list[list[float]]:
 
 def optimal_open_route_order(costs: list[list[float]]) -> list[int]:
     size = len(costs)
+    if size <= 2:
+        return list(range(size))
     state_count = 1 << size
     best = [[math.inf] * size for _ in range(state_count)]
     previous = [[-1] * size for _ in range(state_count)]
-    for start in range(size):
-        best[1 << start][start] = 0
+    best[1][0] = 0
     for mask in range(1, state_count):
         for last in range(size):
             current = best[mask][last]
             if not math.isfinite(current):
                 continue
-            for next_index in range(size):
+            visited_all_via = mask & ((1 << (size - 1)) - 1) == ((1 << (size - 1)) - 1)
+            for next_index in range(1, size):
                 if mask & (1 << next_index):
+                    continue
+                if next_index == size - 1 and not visited_all_via:
                     continue
                 next_cost = current + costs[last][next_index]
                 next_mask = mask | (1 << next_index)
@@ -644,7 +677,7 @@ def optimal_open_route_order(costs: list[list[float]]) -> list[int]:
                     best[next_mask][next_index] = next_cost
                     previous[next_mask][next_index] = last
     full_mask = state_count - 1
-    last = min(range(size), key=lambda index: best[full_mask][index])
+    last = size - 1
     if not math.isfinite(best[full_mask][last]):
         raise ApiError(HTTPStatus.UNPROCESSABLE_ENTITY, "선택한 장소를 모두 연결하는 국내 자동차 경로가 없습니다.")
     order = []
@@ -660,7 +693,7 @@ def optimal_open_route_order(costs: list[list[float]]) -> list[int]:
 def plan_domestic_driving_route(raw_points: object, optimize: bool = False) -> dict:
     points = validate_route_points(raw_points)
     if optimize and len(points) > 10:
-        raise ApiError(HTTPStatus.BAD_REQUEST, "순서 무관 최적화는 최대 10곳까지 지원합니다.")
+        raise ApiError(HTTPStatus.BAD_REQUEST, "경유지 최적화는 최대 10곳까지 지원합니다.")
     order = optimal_open_route_order(kakao_route_costs(points)) if optimize else list(range(len(points)))
     ordered_points = [points[index] for index in order]
     full_path: list[list[float]] = []
@@ -775,10 +808,13 @@ class JoyMapHandler(BaseHTTPRequestHandler):
             data = self.read_json()
             match = re.fullmatch(r"/api/places/(\d+)", parsed.path)
             cache_match = re.fullmatch(r"/api/places/(\d+)/location-cache", parsed.path)
+            category_match = re.fullmatch(r"/api/categories/(\d+)", parsed.path)
             if cache_match:
                 self.send_json({"place": update_location_cache(int(cache_match.group(1)), data)})
             elif match:
                 self.send_json({"place": update_place(int(match.group(1)), data)})
+            elif category_match:
+                self.send_json({"category": update_category(int(category_match.group(1)), data)})
             else:
                 raise ApiError(HTTPStatus.NOT_FOUND, "요청한 API를 찾을 수 없습니다.")
         except ApiError as error:
