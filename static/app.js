@@ -217,7 +217,9 @@ async function initializeApp() {
     if (state.config.configured) {
       await loadGoogleMaps(state.config.maps_api_key);
       await initializeMap();
-      renderMarkers(true);
+      renderMarkers(false);
+      const locationReady = await initializeCurrentMapView();
+      if (!locationReady) renderMarkers(true);
       refreshStaleLocations();
     } else {
       els.mapMessage.hidden = false;
@@ -430,8 +432,8 @@ async function initializeMap() {
     maxWidth: 340,
   });
   state.map.addListener("click", (event) => {
-    hideMapContextMenu();
     if (Date.now() < state.suppressMapClickUntil) return;
+    hideMapContextMenu();
     if (!event.placeId) return;
     event.stop?.();
     void openDrawerForMapPlace(event.placeId);
@@ -545,7 +547,7 @@ function bindMapLongPress() {
       const point = new google.maps.Point(state.longPressStart.x - rect.left, state.longPressStart.y - rect.top);
       const latLng = projection.fromContainerPixelToLatLng(point);
       if (!latLng) return;
-      state.suppressMapClickUntil = Date.now() + 900;
+      state.suppressMapClickUntil = Date.now() + 2500;
       navigator.vibrate?.(30);
       showMapContextMenu(latLng.toJSON(), state.longPressStart.x, state.longPressStart.y);
       state.longPressTimer = null;
@@ -609,7 +611,7 @@ async function handleMapContextAction(event) {
   await assignRoutePlace(coordinateRoutePlace(location), action);
 }
 
-function requestCurrentPosition() {
+function getCurrentPosition(options) {
   return new Promise((resolve, reject) => {
     if (!navigator.geolocation) {
       reject(Object.assign(new Error("위치 기능을 지원하지 않습니다."), { code: 0 }));
@@ -617,8 +619,49 @@ function requestCurrentPosition() {
     }
     navigator.geolocation.getCurrentPosition(({ coords }) => {
       resolve({ lat: coords.latitude, lng: coords.longitude });
-    }, reject, { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 });
+    }, reject, options);
   });
+}
+
+async function requestCurrentPosition() {
+  try {
+    return await getCurrentPosition({ enableHighAccuracy: false, timeout: 12000, maximumAge: 300000 });
+  } catch (error) {
+    if (error.code === 1) throw error;
+    return getCurrentPosition({ enableHighAccuracy: true, timeout: 20000, maximumAge: 60000 });
+  }
+}
+
+function focusMapOnRadius(location, radiusMeters = 5000) {
+  if (!state.map || !Number.isFinite(location?.lat) || !Number.isFinite(location?.lng)) return;
+  const latitudeDelta = radiusMeters / 111320;
+  const longitudeScale = Math.max(.2, Math.cos(location.lat * Math.PI / 180));
+  const longitudeDelta = radiusMeters / (111320 * longitudeScale);
+  const bounds = new google.maps.LatLngBounds(
+    { lat: location.lat - latitudeDelta, lng: location.lng - longitudeDelta },
+    { lat: location.lat + latitudeDelta, lng: location.lng + longitudeDelta },
+  );
+  state.map.fitBounds(bounds, 28);
+}
+
+async function initializeCurrentMapView() {
+  if (!navigator.geolocation || !state.map || !state.AdvancedMarkerElement) return false;
+  els.currentLocationButton.disabled = true;
+  els.currentLocationButton.textContent = "위치 확인 중…";
+  try {
+    const location = await requestCurrentPosition();
+    showCurrentLocation(location, true);
+    return true;
+  } catch (error) {
+    const message = error.code === 1
+      ? "위치 권한을 허용하면 현위치 주변 5km로 시작합니다."
+      : "현위치를 확인하지 못해 저장된 장소를 표시했습니다. 현위치 버튼으로 다시 시도해 주세요.";
+    toast(message, true);
+    return false;
+  } finally {
+    els.currentLocationButton.disabled = false;
+    els.currentLocationButton.textContent = "◎ 현위치";
+  }
 }
 
 function showCurrentLocation(location, focus = true) {
@@ -634,7 +677,7 @@ function showCurrentLocation(location, focus = true) {
     content: markerContent,
     zIndex: 900,
   });
-  if (focus) focusMapOnLocation(location, 16);
+  if (focus) focusMapOnRadius(location, 5000);
 }
 
 function currentLocationRoutePlace(location) {

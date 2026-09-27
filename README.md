@@ -157,8 +157,8 @@ docker compose down
 
 `android/`에는 `map.lhsstart.synology.me`를 전체 화면 앱으로 여는 Trusted Web Activity 프로젝트가 들어 있습니다. 패키지 ID는 `me.synology.lhsstart.map`이며 Android 6.0(API 23) 이상을 지원합니다.
 
-- 휴대폰에 직접 설치: `artifacts/android/PRINSS-MAP-v1.0.1.apk`
-- Google Play 등록: `artifacts/android/PRINSS-MAP-v1.0.1.aab`
+- 휴대폰에 직접 설치: `artifacts/android/PRINSS-MAP-v1.0.2.apk`
+- Google Play 등록: `artifacts/android/PRINSS-MAP-v1.0.2.aab`
 - 업데이트 서명에 필요한 키와 비밀번호 안내는 `artifacts/android/`에 별도로 보관하며 Git에는 올리지 않습니다.
 
 브라우저 주소창 없이 전체 화면으로 열리려면 이 저장소의 `static/assetlinks.json`이 운영 서버의 `/.well-known/assetlinks.json`으로 배포되어야 합니다. 배포 전에도 앱 설치는 가능하지만 사이트 검증이 완료될 때까지 브라우저 화면으로 열릴 수 있습니다.
