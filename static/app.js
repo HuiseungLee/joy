@@ -63,6 +63,10 @@ const els = {
   searchTab: $("#search-tab"),
   savedView: $("#saved-view"),
   searchView: $("#search-view"),
+  sidebar: $("#place-sidebar"),
+  mobileSidebarToggle: $("#mobile-sidebar-toggle"),
+  mobileSidebarClose: $("#mobile-sidebar-close"),
+  mobileSidebarBackdrop: $("#mobile-sidebar-backdrop"),
   savedList: $("#saved-list"),
   categoryFilter: $("#category-filter"),
   scopeFilter: $("#scope-filter"),
@@ -231,6 +235,9 @@ async function initializeApp() {
 
 function bindEvents() {
   els.loginForm.addEventListener("submit", handleLogin);
+  els.mobileSidebarToggle.addEventListener("click", toggleMobileSidebar);
+  els.mobileSidebarClose.addEventListener("click", () => closeMobileSidebar(true));
+  els.mobileSidebarBackdrop.addEventListener("click", () => closeMobileSidebar(true));
   els.logoutButton.addEventListener("click", handleLogout);
   els.exportButton.addEventListener("click", () => { window.location.href = "/api/export"; });
   els.searchForm.addEventListener("submit", handleSearch);
@@ -283,12 +290,46 @@ function bindEvents() {
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Escape") return;
     hideMapContextMenu();
+    if (document.body.classList.contains("mobile-sidebar-open")) closeMobileSidebar(true);
     if (!els.placeDetail.hidden) closePlaceDetail();
     if (els.drawer.classList.contains("is-open")) closeDrawer();
   });
   document.addEventListener("pointerdown", (event) => {
     if (!event.target.closest?.("#map-context-menu")) hideMapContextMenu();
   });
+  window.addEventListener("resize", () => {
+    if (window.innerWidth > 900) closeMobileSidebar(false);
+  });
+}
+
+function openMobileSidebar() {
+  if (window.innerWidth > 900) {
+    els.searchInput.focus();
+    return;
+  }
+  if (!els.placeDetail.hidden) closePlaceDetail();
+  hideMapContextMenu();
+  els.mobileSidebarBackdrop.hidden = false;
+  document.body.classList.add("mobile-sidebar-open");
+  els.mobileSidebarToggle.setAttribute("aria-expanded", "true");
+  window.setTimeout(() => els.searchInput.focus(), 230);
+}
+
+function closeMobileSidebar(restoreFocus = false) {
+  const wasOpen = document.body.classList.contains("mobile-sidebar-open");
+  document.body.classList.remove("mobile-sidebar-open");
+  els.mobileSidebarBackdrop.hidden = true;
+  els.mobileSidebarToggle.setAttribute("aria-expanded", "false");
+  if (restoreFocus && wasOpen) els.mobileSidebarToggle.focus();
+}
+
+function toggleMobileSidebar() {
+  if (window.innerWidth > 900) {
+    els.searchInput.focus();
+    return;
+  }
+  if (document.body.classList.contains("mobile-sidebar-open")) closeMobileSidebar(true);
+  else openMobileSidebar();
 }
 
 function setMobileSheetHeight(panel, property, fraction) {
@@ -2104,7 +2145,7 @@ function focusMapOnLocation(location, zoom = 16, accountForDrawer = false) {
 
 function revealMapForMobile() {
   if (window.innerWidth > 900) return;
-  els.mapStage.scrollIntoView({ behavior: "smooth", block: "start" });
+  closeMobileSidebar(false);
 }
 
 function loadImageFile(file) {
