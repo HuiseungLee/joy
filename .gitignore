@@ -15,5 +15,6 @@ android/*.aab
 android/*.idsig
 artifacts/android/*.apk
 artifacts/android/*.aab
+artifacts/android/*.idsig
 artifacts/android/*.keystore
 artifacts/android/*-signing-info.txt
