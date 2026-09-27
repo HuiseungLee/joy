@@ -258,7 +258,11 @@
 
       <div class="field photo-field">
         <span>사진 <em>JPG·PNG·WebP</em></span>
-        <input id="place-photo" type="file" accept="image/jpeg,image/png,image/webp">
+        <div id="place-photo-drop-zone" class="photo-drop-zone" tabindex="0" role="button" aria-label="사진을 선택하거나 끌어놓거나 붙여넣기">
+          <strong>사진 선택 또는 여기로 끌어놓기</strong>
+          <small>화면 캡처 후 Ctrl+V로 바로 붙여넣을 수 있습니다.</small>
+          <input id="place-photo" type="file" accept="image/jpeg,image/png,image/webp">
+        </div>
         <div id="place-photo-preview" class="place-photo-preview" hidden>
           <img id="place-photo-image" alt="선택한 장소 사진 미리보기">
           <button id="remove-place-photo" class="secondary-button" type="button">사진 삭제</button>
@@ -298,6 +302,6 @@
   </dialog>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="/app.js?v=20260927-7" defer></script>
+  <script src="/app.js?v=20260927-8" defer></script>
 </body>
 </html>

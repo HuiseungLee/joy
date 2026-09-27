@@ -129,6 +129,7 @@ const els = {
   region: $("#region"),
   locality: $("#locality"),
   district: $("#district"),
+  placePhotoDropZone: $("#place-photo-drop-zone"),
   placePhoto: $("#place-photo"),
   placePhotoPreview: $("#place-photo-preview"),
   placePhotoImage: $("#place-photo-image"),
@@ -263,6 +264,13 @@ function bindEvents() {
   els.drawerBackdrop.addEventListener("click", closeDrawer);
   els.placeForm.addEventListener("submit", savePlace);
   els.placePhoto.addEventListener("change", handlePlacePhotoChange);
+  els.placePhotoDropZone.addEventListener("click", handlePlacePhotoZoneClick);
+  els.placePhotoDropZone.addEventListener("keydown", handlePlacePhotoZoneKeydown);
+  els.placePhotoDropZone.addEventListener("dragenter", handlePlacePhotoDragOver);
+  els.placePhotoDropZone.addEventListener("dragover", handlePlacePhotoDragOver);
+  els.placePhotoDropZone.addEventListener("dragleave", handlePlacePhotoDragLeave);
+  els.placePhotoDropZone.addEventListener("drop", handlePlacePhotoDrop);
+  document.addEventListener("paste", handlePlacePhotoPaste);
   els.removePlacePhoto.addEventListener("click", removeSelectedPlacePhoto);
   els.shareForm.addEventListener("submit", handleSharedMessage);
   els.deletePlaceButton.addEventListener("click", deleteCurrentPlace);
@@ -2106,21 +2114,72 @@ function showPlacePhotoPreview(source) {
   els.placePhotoPreview.hidden = false;
 }
 
-async function handlePlacePhotoChange() {
-  const file = els.placePhoto.files?.[0];
+async function usePlacePhotoFile(file, successMessage = "") {
   if (!file) return;
   els.placePhoto.disabled = true;
+  els.placePhotoDropZone.classList.add("is-processing");
   try {
     const dataUrl = await preparePlacePhoto(file);
     state.pendingPlacePhoto = dataUrl;
     state.removePlacePhoto = false;
     showPlacePhotoPreview(dataUrl);
+    if (successMessage) toast(successMessage);
   } catch (error) {
     els.placePhoto.value = "";
     toast(error.message, true);
   } finally {
     els.placePhoto.disabled = false;
+    els.placePhotoDropZone.classList.remove("is-processing");
   }
+}
+
+async function handlePlacePhotoChange() {
+  await usePlacePhotoFile(els.placePhoto.files?.[0]);
+}
+
+function handlePlacePhotoZoneClick(event) {
+  if (event.target === els.placePhoto) return;
+  els.placePhoto.click();
+}
+
+function handlePlacePhotoZoneKeydown(event) {
+  if (event.target === els.placePhoto) return;
+  if (event.key !== "Enter" && event.key !== " ") return;
+  event.preventDefault();
+  els.placePhoto.click();
+}
+
+function handlePlacePhotoDragOver(event) {
+  event.preventDefault();
+  if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+  els.placePhotoDropZone.classList.add("is-dragover");
+}
+
+function handlePlacePhotoDragLeave(event) {
+  if (event.relatedTarget && els.placePhotoDropZone.contains(event.relatedTarget)) return;
+  els.placePhotoDropZone.classList.remove("is-dragover");
+}
+
+async function handlePlacePhotoDrop(event) {
+  event.preventDefault();
+  els.placePhotoDropZone.classList.remove("is-dragover");
+  const file = Array.from(event.dataTransfer?.files || []).find((item) => item.type.startsWith("image/"));
+  if (!file) {
+    toast("사진 파일을 끌어놓아 주세요.", true);
+    return;
+  }
+  els.placePhoto.value = "";
+  await usePlacePhotoFile(file, "사진을 추가했습니다.");
+}
+
+async function handlePlacePhotoPaste(event) {
+  if (!els.drawer.classList.contains("is-open")) return;
+  const imageItem = Array.from(event.clipboardData?.items || []).find((item) => item.kind === "file" && item.type.startsWith("image/"));
+  const file = imageItem?.getAsFile();
+  if (!file) return;
+  event.preventDefault();
+  els.placePhoto.value = "";
+  await usePlacePhotoFile(file, "캡처한 사진을 붙여넣었습니다.");
 }
 
 function removeSelectedPlacePhoto() {
