@@ -6,3 +6,14 @@ data/*
 __pycache__/
 *.py[cod]
 .DS_Store
+android/.gradle/
+android/app/build/
+android/build/
+android/local.properties
+android/*.apk
+android/*.aab
+android/*.idsig
+artifacts/android/*.apk
+artifacts/android/*.aab
+artifacts/android/*.keystore
+artifacts/android/*-signing-info.txt

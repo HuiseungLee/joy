@@ -1,0 +1,47 @@
+{
+  "packageId": "me.synology.lhsstart.map",
+  "host": "map.lhsstart.synology.me",
+  "name": "PRINSS MAP",
+  "launcherName": "PRINSS MAP",
+  "display": "standalone",
+  "themeColor": "#132238",
+  "themeColorDark": "#132238",
+  "navigationColor": "#132238",
+  "navigationColorDark": "#132238",
+  "navigationDividerColor": "#132238",
+  "navigationDividerColorDark": "#132238",
+  "backgroundColor": "#fffdf9",
+  "enableNotifications": false,
+  "enableSiteSettingsShortcut": true,
+  "startUrl": "/?source=android",
+  "iconUrl": "https://map.lhsstart.synology.me/icon-512.png",
+  "maskableIconUrl": "https://map.lhsstart.synology.me/icon-512.png",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "../artifacts/android/prinss-map-release.keystore",
+    "alias": "prinss-map"
+  },
+  "appVersion": "1.0.0",
+  "appVersionCode": 1,
+  "shortcuts": [],
+  "generatorApp": "bubblewrap-cli",
+  "webManifestUrl": "https://map.lhsstart.synology.me/manifest.webmanifest",
+  "fallbackType": "customtabs",
+  "features": {
+    "locationDelegation": {
+      "enabled": true
+    }
+  },
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "fullScopeUrl": "https://map.lhsstart.synology.me/",
+  "minSdkVersion": 23,
+  "orientation": "any",
+  "fingerprints": [],
+  "additionalTrustedOrigins": [],
+  "retainedBundles": [],
+  "displayOverride": []
+}

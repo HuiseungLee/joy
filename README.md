@@ -151,6 +151,16 @@ docker compose down
 
 `docker compose down`은 `data` 폴더를 삭제하지 않습니다.
 
+## Android 앱
+
+`android/`에는 `map.lhsstart.synology.me`를 전체 화면 앱으로 여는 Trusted Web Activity 프로젝트가 들어 있습니다. 패키지 ID는 `me.synology.lhsstart.map`이며 Android 6.0(API 23) 이상을 지원합니다.
+
+- 휴대폰에 직접 설치: `artifacts/android/PRINSS-MAP-v1.0.0.apk`
+- Google Play 등록: `artifacts/android/PRINSS-MAP-v1.0.0.aab`
+- 업데이트 서명에 필요한 키와 비밀번호 안내는 `artifacts/android/`에 별도로 보관하며 Git에는 올리지 않습니다.
+
+브라우저 주소창 없이 전체 화면으로 열리려면 이 저장소의 `static/assetlinks.json`이 운영 서버의 `/.well-known/assetlinks.json`으로 배포되어야 합니다. 배포 전에도 앱 설치는 가능하지만 사이트 검증이 완료될 때까지 브라우저 화면으로 열릴 수 있습니다.
+
 ## GitHub 푸시 자동 배포
 
 이 프로젝트는 문법 사이트와 같은 배포 흐름을 사용합니다. `main` 브랜치에 푸시되면 `.github/workflows/deploy-synology.yml`이 NAS에 SSH로 접속하고, `/volume1/docker/joy-map/scripts/synology-auto-deploy.sh`를 실행합니다. 배포 스크립트는 최신 커밋만 fast-forward로 받은 뒤 이미지를 다시 만들고 `http://127.0.0.1:7330/api/health`가 정상인지 확인합니다.

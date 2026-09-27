@@ -1,1 +1,14 @@
-[]
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "me.synology.lhsstart.map",
+      "sha256_cert_fingerprints": [
+        "BF:3B:3A:F6:8E:34:A1:00:5A:45:15:7B:7F:42:5F:7C:9C:F8:02:BD:9A:3B:30:EC:C7:4B:B8:1A:A9:EB:D4:9E"
+      ]
+    }
+  }
+]
