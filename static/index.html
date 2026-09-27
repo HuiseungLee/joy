@@ -11,7 +11,7 @@
   <link rel="icon" href="/favicon.svg?v=2" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/icon-192.png">
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/app.css?v=20260927-6">
+  <link rel="stylesheet" href="/app.css?v=20260927-7">
 </head>
 <body>
   <section id="login-screen" class="login-screen" aria-labelledby="login-title">
@@ -288,6 +288,29 @@
     </form>
   </aside>
 
+  <dialog id="route-place-dialog" class="dialog route-place-dialog">
+    <form id="route-place-search-form">
+      <div class="dialog-header">
+        <div><p class="eyebrow">ROUTE PLACE</p><h2 id="route-place-dialog-title">경로 지점 선택</h2></div>
+        <button id="route-place-dialog-close" class="icon-button" type="button" aria-label="경로 지점 선택창 닫기">×</button>
+      </div>
+      <label class="field">
+        <span>장소명·주소 직접 입력</span>
+        <span class="route-place-search-row">
+          <input id="route-place-query" type="search" maxlength="180" placeholder="예: 서울역, 세종대로 110" autocomplete="off">
+          <button class="primary-button" type="submit">찾기</button>
+        </span>
+      </label>
+      <p id="route-place-search-status" class="inline-status compact-status" hidden></p>
+      <div id="route-place-search-results" class="route-place-options" hidden></div>
+      <div class="route-place-saved-header">
+        <strong>저장된 장소에서 선택</strong>
+        <input id="route-saved-filter" type="search" maxlength="120" placeholder="저장 장소 검색" autocomplete="off">
+      </div>
+      <div id="route-saved-options" class="route-place-options"></div>
+    </form>
+  </dialog>
+
   <dialog id="category-dialog" class="dialog">
     <form id="category-form" method="dialog">
       <div class="dialog-header">
@@ -306,6 +329,6 @@
   </dialog>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="/app.js?v=20260927-10" defer></script>
+  <script src="/app.js?v=20260927-11" defer></script>
 </body>
 </html>

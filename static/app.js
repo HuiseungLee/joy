@@ -23,6 +23,7 @@ const state = {
   routeStartId: null,
   routeDestinationId: null,
   routeEditTarget: null,
+  routePlaceSearchMatches: [],
   routeCustomPlaces: new Map(),
   routeCustomMarkers: new Map(),
   nextCustomRouteId: -1,
@@ -111,6 +112,15 @@ const els = {
   routeGuidanceTitle: $("#route-guidance-title"),
   routeGuidanceSummary: $("#route-guidance-summary"),
   routeGuidanceItinerary: $("#route-guidance-itinerary"),
+  routePlaceDialog: $("#route-place-dialog"),
+  routePlaceDialogTitle: $("#route-place-dialog-title"),
+  routePlaceDialogClose: $("#route-place-dialog-close"),
+  routePlaceSearchForm: $("#route-place-search-form"),
+  routePlaceQuery: $("#route-place-query"),
+  routePlaceSearchStatus: $("#route-place-search-status"),
+  routePlaceSearchResults: $("#route-place-search-results"),
+  routeSavedFilter: $("#route-saved-filter"),
+  routeSavedOptions: $("#route-saved-options"),
   mapLegend: $("#map-legend"),
   drawer: $("#place-drawer"),
   drawerBackdrop: $("#drawer-backdrop"),
@@ -267,6 +277,15 @@ function bindEvents() {
   els.routeSwapButton.addEventListener("click", swapRouteEndpoints);
   els.routeStopList.addEventListener("click", handleRouteStopAction);
   els.routeStopList.addEventListener("pointerdown", beginRouteStopDrag);
+  els.routePlaceSearchForm.addEventListener("submit", searchRoutePlace);
+  els.routePlaceDialogClose.addEventListener("click", closeRoutePlaceDialog);
+  els.routePlaceSearchResults.addEventListener("click", chooseRouteSearchResult);
+  els.routeSavedOptions.addEventListener("click", chooseSavedRoutePlace);
+  els.routeSavedFilter.addEventListener("input", renderRouteSavedOptions);
+  els.routePlaceDialog.addEventListener("cancel", (event) => {
+    event.preventDefault();
+    closeRoutePlaceDialog();
+  });
   window.addEventListener("pointermove", moveRouteStopDrag);
   window.addEventListener("pointerup", finishRouteStopDrag);
   window.addEventListener("pointercancel", finishRouteStopDrag);
@@ -664,7 +683,28 @@ function getCurrentPosition(options) {
   });
 }
 
+function isAndroidApp() {
+  return new URLSearchParams(window.location.search).get("source") === "android";
+}
+
+function getNativeAppLocation() {
+  const params = new URLSearchParams(window.location.search);
+  const latitudeValue = params.get("native_lat");
+  const longitudeValue = params.get("native_lng");
+  if (latitudeValue === null || longitudeValue === null) return null;
+  const latitude = Number(latitudeValue);
+  const longitude = Number(longitudeValue);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)
+      || Math.abs(latitude) > 90 || Math.abs(longitude) > 180) return null;
+  return { lat: latitude, lng: longitude };
+}
+
 async function requestCurrentPosition() {
+  const nativeLocation = getNativeAppLocation() || (isAndroidApp() ? state.currentLocation : null);
+  if (nativeLocation) return nativeLocation;
+  if (isAndroidApp()) {
+    throw Object.assign(new Error("앱 위치 권한 또는 기기 위치가 꺼져 있습니다."), { code: 1, nativeApp: true });
+  }
   try {
     return await getCurrentPosition({ enableHighAccuracy: false, timeout: 12000, maximumAge: 300000 });
   } catch (error) {
@@ -686,11 +726,11 @@ function focusMapOnRadius(location, radiusMeters = 5000) {
 }
 
 async function initializeCurrentMapView() {
-  if (!navigator.geolocation || !state.map || !state.AdvancedMarkerElement) return false;
+  if (!state.map || !state.AdvancedMarkerElement) return false;
   els.currentLocationButton.disabled = true;
   els.currentLocationButton.textContent = "위치 확인 중…";
   try {
-    const location = await requestCurrentPosition();
+    const location = getNativeAppLocation() || await requestCurrentPosition();
     showCurrentLocation(location, true);
     return true;
   } catch (error) {
@@ -762,7 +802,7 @@ async function ensureCurrentLocationAsStart() {
 }
 
 async function locateCurrentPosition() {
-  if (!navigator.geolocation || !state.map || !state.AdvancedMarkerElement) {
+  if (!state.map || !state.AdvancedMarkerElement || (!navigator.geolocation && !getNativeAppLocation())) {
     toast("이 기기에서는 현위치 기능을 지원하지 않습니다.", true);
     return;
   }
@@ -773,7 +813,9 @@ async function locateCurrentPosition() {
     showCurrentLocation(location, true);
     toast("현재 위치를 지도에 표시했습니다.");
   } catch (error) {
-    const message = error.code === 1
+    const message = error.nativeApp
+      ? "휴대폰 설정에서 PRINSS MAP의 위치 권한과 기기 위치를 켠 뒤 앱을 다시 열어 주세요."
+      : error.code === 1
       ? "브라우저 설정에서 위치 권한을 허용해 주세요."
       : "현재 위치를 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.";
     toast(message, true);
@@ -1359,14 +1401,154 @@ function beginRouteStopEdit(role, replaceId = null) {
   closePlaceDetail();
   renderRoutePlanner(false);
   const roleLabel = role === "start" ? "출발지" : role === "destination" ? "도착지" : "경유지";
-  els.routeStatus.textContent = `변경할 ${roleLabel}를 지도나 저장 장소 목록에서 선택하세요.`;
-  toast(`${roleLabel}로 사용할 장소를 선택해 주세요.`);
+  els.routeStatus.textContent = `${roleLabel}를 직접 검색하거나 저장된 장소에서 선택하세요.`;
+  els.routePlaceDialogTitle.textContent = `${roleLabel} 선택`;
+  els.routePlaceQuery.value = "";
+  els.routeSavedFilter.value = "";
+  els.routePlaceSearchStatus.hidden = true;
+  els.routePlaceSearchResults.hidden = true;
+  els.routePlaceSearchResults.replaceChildren();
+  state.routePlaceSearchMatches = [];
+  renderRouteSavedOptions();
+  if (!els.routePlaceDialog.open) els.routePlaceDialog.showModal();
+  window.setTimeout(() => els.routePlaceQuery.focus(), 40);
 }
 
 async function applyRouteEditSelection(place) {
   const target = state.routeEditTarget;
   if (!target) return false;
-  return assignRoutePlace(place, target.role, { replaceId: target.replaceId, autoCurrentStart: true });
+  const assigned = await assignRoutePlace(place, target.role, { replaceId: target.replaceId, autoCurrentStart: true });
+  if (assigned && els.routePlaceDialog.open) closeRoutePlaceDialog(false);
+  return assigned;
+}
+
+function closeRoutePlaceDialog(cancelEdit = true) {
+  if (els.routePlaceDialog.open) els.routePlaceDialog.close();
+  state.routePlaceSearchMatches = [];
+  if (cancelEdit && state.routeEditTarget) {
+    state.routeEditTarget = null;
+    renderRoutePlanner(true);
+  }
+}
+
+function routePlaceOption(place, value, source) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "route-place-option";
+  button.dataset.routePlaceSource = source;
+  button.dataset.routePlaceValue = String(value);
+  const title = document.createElement("strong");
+  title.textContent = place.label || place.displayName || "이름 없는 장소";
+  const detail = document.createElement("small");
+  detail.textContent = place.formattedAddress
+    || [place.region, place.locality, place.district].filter(Boolean).join(" · ")
+    || "좌표가 확인된 장소";
+  button.append(title, detail);
+  return button;
+}
+
+function renderRouteSavedOptions() {
+  const query = els.routeSavedFilter.value.trim().toLocaleLowerCase("ko");
+  const candidates = state.places.filter((place) => {
+    if (!Number.isFinite(place.latitude) || !Number.isFinite(place.longitude) || place.location_cache_stale) return false;
+    if (!query) return true;
+    return [place.label, place.region, place.locality, place.district, place.memo]
+      .filter(Boolean).join(" ").toLocaleLowerCase("ko").includes(query);
+  });
+  els.routeSavedOptions.replaceChildren();
+  candidates.slice(0, 60).forEach((place) => {
+    els.routeSavedOptions.appendChild(routePlaceOption(place, place.id, "saved"));
+  });
+  if (!candidates.length) {
+    const empty = document.createElement("p");
+    empty.className = "route-place-empty";
+    empty.textContent = query ? "일치하는 저장 장소가 없습니다." : "좌표가 확인된 저장 장소가 없습니다.";
+    els.routeSavedOptions.appendChild(empty);
+  }
+}
+
+async function chooseSavedRoutePlace(event) {
+  const button = event.target.closest?.('[data-route-place-source="saved"]');
+  if (!button) return;
+  const place = state.places.find((item) => item.id === Number(button.dataset.routePlaceValue));
+  if (place) await applyRouteEditSelection(place);
+}
+
+async function searchRoutePlace(event) {
+  event.preventDefault();
+  const query = els.routePlaceQuery.value.trim();
+  if (!query) {
+    els.routePlaceQuery.focus();
+    return;
+  }
+  if (!state.Place) {
+    els.routePlaceSearchStatus.hidden = false;
+    els.routePlaceSearchStatus.textContent = "Google 지도 API 설정을 먼저 완료해 주세요.";
+    return;
+  }
+  const submit = els.routePlaceSearchForm.querySelector('button[type="submit"]');
+  submit.disabled = true;
+  els.routePlaceSearchStatus.hidden = false;
+  els.routePlaceSearchStatus.classList.add("is-loading");
+  els.routePlaceSearchStatus.textContent = `‘${query}’ 장소를 찾는 중…`;
+  els.routePlaceSearchResults.hidden = true;
+  try {
+    const request = {
+      textQuery: query,
+      fields: ["id", "displayName", "formattedAddress", "location", "addressComponents"],
+      maxResultCount: 5,
+    };
+    const languageRegion = (navigator.language.split("-")[1] || "").toLowerCase();
+    if (/^[a-z]{2}$/.test(languageRegion)) request.region = languageRegion;
+    const { places = [] } = await state.Place.searchByText(request);
+    state.routePlaceSearchMatches = places.filter((place) => place.id && place.location);
+    els.routePlaceSearchResults.replaceChildren();
+    state.routePlaceSearchMatches.forEach((place, index) => {
+      els.routePlaceSearchResults.appendChild(routePlaceOption(place, index, "search"));
+    });
+    if (!state.routePlaceSearchMatches.length) {
+      els.routePlaceSearchStatus.textContent = "검색 결과가 없습니다. 도시명과 장소명을 함께 입력해 보세요.";
+      return;
+    }
+    els.routePlaceSearchStatus.textContent = "검색 결과에서 사용할 장소를 선택하세요.";
+    els.routePlaceSearchResults.hidden = false;
+  } catch (error) {
+    console.error(error);
+    els.routePlaceSearchStatus.textContent = "장소를 검색하지 못했습니다. 잠시 후 다시 시도해 주세요.";
+  } finally {
+    submit.disabled = false;
+    els.routePlaceSearchStatus.classList.remove("is-loading");
+  }
+}
+
+function googleResultToRoutePlace(result) {
+  const saved = state.places.find((place) => place.provider === "google" && place.provider_place_id === result.id);
+  if (saved) return saved;
+  const location = result.location.toJSON();
+  const region = parseAddressComponents(result.addressComponents || []);
+  const id = state.nextCustomRouteId--;
+  const place = {
+    id,
+    provider: "google",
+    provider_place_id: result.id,
+    label: result.displayName || "검색 장소",
+    formattedAddress: result.formattedAddress || "",
+    latitude: location.lat,
+    longitude: location.lng,
+    ...region,
+    location_cache_stale: false,
+    category_name: "검색 장소",
+    category_color: "#2d6cdf",
+  };
+  state.routeCustomPlaces.set(id, place);
+  return place;
+}
+
+async function chooseRouteSearchResult(event) {
+  const button = event.target.closest?.('[data-route-place-source="search"]');
+  if (!button) return;
+  const result = state.routePlaceSearchMatches[Number(button.dataset.routePlaceValue)];
+  if (result) await applyRouteEditSelection(googleResultToRoutePlace(result));
 }
 
 function removeRouteStop(id) {
@@ -1538,7 +1720,7 @@ function renderRoutePlanner(resetStatus = false) {
   if (resetStatus) {
     const travelModeLabel = getTravelModeLabel();
     els.routeStatus.textContent = state.routeEditTarget
-      ? "지도나 저장 장소 목록에서 변경할 지점을 선택하세요."
+      ? "장소명을 직접 검색하거나 저장된 장소에서 변경할 지점을 선택하세요."
       : !hasEnough
       ? "장소 상세 또는 지도 메뉴에서 출발지와 도착지를 지정하세요."
       : `손잡이로 순서를 조정한 뒤 ${travelModeLabel} 경로 안내를 눌러 주세요.`;
