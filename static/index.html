@@ -101,11 +101,11 @@
             <div class="sns-place-heading">
               <p class="eyebrow">SNS PLACE FINDER</p>
               <h2>SNS 공유문으로 장소 찾기</h2>
-              <p>카카오톡이나 지도 앱에서 받은 장소 공유문 전체를 붙여 넣으세요.</p>
+              <p>지도 앱에서 받은 공유문 전체 또는 네이버 장소 링크만 붙여 넣으세요.</p>
             </div>
             <label class="field">
               <span>공유문 붙여넣기</span>
-              <textarea id="share-message" maxlength="5000" rows="10" required placeholder="[네이버지도]&#10;유성왕수산&#10;대전 유성구 대학로 35 유성왕수산&#10;https://naver.me/..."></textarea>
+              <textarea id="share-message" maxlength="5000" rows="10" required placeholder="https://naver.me/...&#10;&#10;또는&#10;[네이버지도]&#10;유성왕수산&#10;대전 유성구 대학로 35 유성왕수산"></textarea>
             </label>
             <p class="policy-note">장소명과 주소를 추출하여 지도에서 위치를 찾습니다. 저장 전 지도에서 검색된 지점을 확인할 수 있습니다.</p>
             <p id="share-status" class="inline-status compact-status" hidden></p>
@@ -133,6 +133,7 @@
             </div>
             <button id="place-detail-close" class="icon-button" type="button" aria-label="장소 상세 닫기">×</button>
           </div>
+          <img id="place-detail-photo" class="place-detail-photo" alt="" hidden>
           <p id="place-detail-location" class="place-detail-location"></p>
           <p id="place-detail-memo" class="place-detail-memo"></p>
           <div class="place-detail-route-actions" aria-label="경로 지점으로 지정">
@@ -255,6 +256,16 @@
       </div>
       <p class="policy-note">국가 코드가 KR이면 국내, 그 외 국가는 해외로 자동 분류됩니다. 지역 태그와 저장 이름은 직접 확인한 내용으로 저장됩니다.</p>
 
+      <div class="field photo-field">
+        <span>사진 <em>JPG·PNG·WebP</em></span>
+        <input id="place-photo" type="file" accept="image/jpeg,image/png,image/webp">
+        <div id="place-photo-preview" class="place-photo-preview" hidden>
+          <img id="place-photo-image" alt="선택한 장소 사진 미리보기">
+          <button id="remove-place-photo" class="secondary-button" type="button">사진 삭제</button>
+        </div>
+        <small>사진은 업로드 전에 자동으로 크기와 용량을 줄입니다.</small>
+      </div>
+
       <label class="field memo-field">
         <span>메모</span>
         <textarea id="memo" maxlength="5000" rows="6" placeholder="먹어볼 메뉴, 영업시간 메모, 다시 찾을 이유…"></textarea>
@@ -287,6 +298,6 @@
   </dialog>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="/app.js?v=20260927-6" defer></script>
+  <script src="/app.js?v=20260927-7" defer></script>
 </body>
 </html>

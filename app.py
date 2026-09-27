@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """JOY MAP - dependency-free personal place map server.
 
-The server deliberately stores only a Google Place ID, user-authored fields, and a
+The server stores a Google Place ID, user-authored fields and photos, and a
 short-lived coordinate cache. Google place names/addresses stay in the browser.
 """
 
 from __future__ import annotations
 
 import base64
+import binascii
 import hashlib
 import hmac
 import json
@@ -29,7 +30,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, urlencode, urlparse
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -47,7 +48,8 @@ KAKAO_REST_API_KEY = os.getenv("KAKAO_REST_API_KEY", "")
 COOKIE_SECURE = os.getenv("COOKIE_SECURE", "false").lower() in {"1", "true", "yes", "on"}
 SESSION_HOURS = max(1, min(720, int(os.getenv("SESSION_HOURS", "168"))))
 COORDINATE_CACHE_DAYS = 29
-MAX_BODY_BYTES = 1_000_000
+MAX_BODY_BYTES = 3_000_000
+MAX_PHOTO_BYTES = 1_500_000
 
 DB_LOCK = threading.RLock()
 LOGIN_ATTEMPTS: dict[str, list[float]] = {}
@@ -55,6 +57,9 @@ LOGIN_LOCK = threading.Lock()
 
 COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
 SAFE_SLUG_RE = re.compile(r"[^a-z0-9]+")
+PHOTO_FILENAME_RE = re.compile(r"^[a-f0-9]{32}\.(?:jpg|png|webp)$")
+NAVER_PLACE_ID_RE = re.compile(r"/(?:entry/)?place/(\d+)")
+NAVER_ALLOWED_HOSTS = {"naver.me", "map.naver.com"}
 
 
 class ApiError(Exception):
@@ -62,6 +67,18 @@ class ApiError(Exception):
         super().__init__(message)
         self.status = status
         self.message = message
+
+
+class NaverRedirectHandler(HTTPRedirectHandler):
+    def redirect_request(self, request, response, code, message, headers, new_url):
+        parsed = urlparse(new_url)
+        if parsed.scheme != "https" or parsed.hostname not in NAVER_ALLOWED_HOSTS:
+            raise HTTPError(new_url, HTTPStatus.BAD_GATEWAY, "Unsafe redirect", headers, response)
+        return super().redirect_request(request, response, code, message, headers, new_url)
+
+
+def open_naver_url(request: Request, timeout: int = 10):
+    return build_opener(NaverRedirectHandler()).open(request, timeout=timeout)
 
 
 def utc_now() -> datetime:
@@ -165,6 +182,7 @@ def init_database() -> None:
                 district TEXT NOT NULL DEFAULT '',
                 planned_month INTEGER,
                 memo TEXT NOT NULL DEFAULT '',
+                photo_filename TEXT NOT NULL DEFAULT '',
                 latitude REAL,
                 longitude REAL,
                 location_cached_at TEXT,
@@ -184,6 +202,8 @@ def init_database() -> None:
         }
         if "planned_month" not in place_columns:
             db.execute("ALTER TABLE places ADD COLUMN planned_month INTEGER")
+        if "photo_filename" not in place_columns:
+            db.execute("ALTER TABLE places ADD COLUMN photo_filename TEXT NOT NULL DEFAULT ''")
         db.execute("CREATE INDEX IF NOT EXISTS idx_places_planned_month ON places(planned_month)")
         if db.execute("SELECT COUNT(*) FROM categories").fetchone()[0] == 0:
             now = iso_now()
@@ -217,12 +237,124 @@ def number(value: object, field: str, minimum: float, maximum: float) -> float:
 
 def row_to_place(row: sqlite3.Row) -> dict:
     payload = dict(row)
+    photo_filename = payload.pop("photo_filename", "")
+    payload["photo_url"] = f"/media/place-photos/{photo_filename}" if photo_filename else ""
     cached_at = parse_iso(payload.get("location_cached_at"))
     payload["location_cache_stale"] = (
         payload.get("provider") == "google"
         and (cached_at is None or cached_at + timedelta(days=COORDINATE_CACHE_DAYS) <= utc_now())
     )
     return payload
+
+
+def photo_directory() -> Path:
+    return DATA_DIR / "place-photos"
+
+
+def decode_photo_data(value: object) -> tuple[bytes, str] | None:
+    if value is None or value == "":
+        return None
+    if not isinstance(value, str):
+        raise ApiError(HTTPStatus.BAD_REQUEST, "사진 형식이 올바르지 않습니다.")
+    match = re.fullmatch(r"data:(image/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=\r\n]+)", value)
+    if not match:
+        raise ApiError(HTTPStatus.BAD_REQUEST, "JPG, PNG, WebP 사진만 등록할 수 있습니다.")
+    try:
+        raw = base64.b64decode(match.group(2), validate=True)
+    except (binascii.Error, ValueError):
+        raise ApiError(HTTPStatus.BAD_REQUEST, "사진 데이터를 읽지 못했습니다.") from None
+    if not raw or len(raw) > MAX_PHOTO_BYTES:
+        raise ApiError(HTTPStatus.BAD_REQUEST, "사진은 처리 후 1.5MB 이하여야 합니다.")
+    mime = match.group(1)
+    signatures = {
+        "image/jpeg": raw.startswith(b"\xff\xd8\xff"),
+        "image/png": raw.startswith(b"\x89PNG\r\n\x1a\n"),
+        "image/webp": len(raw) >= 12 and raw.startswith(b"RIFF") and raw[8:12] == b"WEBP",
+    }
+    if not signatures[mime]:
+        raise ApiError(HTTPStatus.BAD_REQUEST, "사진 파일의 실제 형식을 확인해 주세요.")
+    extension = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}[mime]
+    return raw, extension
+
+
+def save_place_photo(value: object) -> str:
+    decoded = decode_photo_data(value)
+    if decoded is None:
+        return ""
+    raw, extension = decoded
+    directory = photo_directory()
+    directory.mkdir(parents=True, exist_ok=True)
+    filename = f"{uuid.uuid4().hex}.{extension}"
+    temporary = directory / f".{filename}.tmp"
+    temporary.write_bytes(raw)
+    temporary.replace(directory / filename)
+    return filename
+
+
+def delete_place_photo(filename: str | None) -> None:
+    if not filename or not PHOTO_FILENAME_RE.fullmatch(filename):
+        return
+    try:
+        (photo_directory() / filename).unlink(missing_ok=True)
+    except OSError as error:
+        print(f"Could not delete place photo {filename}: {error}", file=sys.stderr)
+
+
+def resolve_naver_share_url(value: object) -> dict:
+    url = text(value, 1000, "네이버 주소", required=True)
+    parsed = urlparse(url)
+    if parsed.scheme != "https" or parsed.hostname not in NAVER_ALLOWED_HOSTS:
+        raise ApiError(HTTPStatus.BAD_REQUEST, "naver.me 또는 map.naver.com 주소를 입력해 주세요.")
+    request = Request(url, headers={
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140 Safari/537.36",
+        "Accept-Language": "ko-KR,ko;q=0.9",
+    })
+    try:
+        with open_naver_url(request, timeout=10) as response:
+            final_url = response.geturl()
+    except (HTTPError, URLError, TimeoutError):
+        raise ApiError(HTTPStatus.BAD_GATEWAY, "네이버 주소를 열지 못했습니다.") from None
+    final = urlparse(final_url)
+    match = NAVER_PLACE_ID_RE.search(final.path)
+    if final.scheme != "https" or final.hostname != "map.naver.com" or not match:
+        raise ApiError(HTTPStatus.UNPROCESSABLE_ENTITY, "네이버 장소 링크에서 장소 ID를 찾지 못했습니다.")
+    place_id = match.group(1)
+    summary_url = f"https://map.naver.com/p/api/place/summary/{place_id}"
+    summary_request = Request(summary_url, headers={
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140 Safari/537.36",
+        "Referer": final_url,
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "ko-KR,ko;q=0.9",
+    })
+    try:
+        with open_naver_url(summary_request, timeout=10) as response:
+            body = response.read(1_000_001)
+            if len(body) > 1_000_000:
+                raise ApiError(HTTPStatus.BAD_GATEWAY, "네이버 장소 정보 응답이 너무 큽니다.")
+            payload = json.loads(body.decode("utf-8"))
+    except (HTTPError, URLError, TimeoutError, UnicodeDecodeError, json.JSONDecodeError):
+        raise ApiError(HTTPStatus.BAD_GATEWAY, "네이버에서 장소 정보를 가져오지 못했습니다.") from None
+    detail = payload.get("data", {}).get("placeDetail", {})
+    coordinate = detail.get("coordinate") or {}
+    address_data = detail.get("address") or {}
+    name = text(detail.get("name"), 120, "장소명", required=True)
+    address = text(address_data.get("roadAddress") or address_data.get("address"), 300, "주소", required=True)
+    latitude = number(coordinate.get("latitude"), "위도", -90, 90)
+    longitude = number(coordinate.get("longitude"), "경도", -180, 180)
+    address_parts = address.split()
+    return {
+        "name": name,
+        "address": address,
+        "latitude": latitude,
+        "longitude": longitude,
+        "naver_place_id": place_id,
+        "resolved_url": final_url,
+        "query": f"{name} {address}",
+        "country_code": "KR",
+        "region": address_parts[0] if address_parts else "",
+        "locality": address_parts[1] if len(address_parts) > 1 else "",
+        "district": address_parts[2] if len(address_parts) > 2 else "",
+    }
 
 
 def get_category(db: sqlite3.Connection, category_id: int) -> sqlite3.Row:
@@ -422,53 +554,76 @@ def validate_place(data: dict, existing: sqlite3.Row | None = None) -> dict:
 
 
 def create_place(data: dict) -> dict:
-    with DB_LOCK, database() as db:
-        values = validate_place(data)
-        get_category(db, values["category_id"])
-        now = iso_now()
-        cached_at = now if values["latitude"] is not None else None
-        try:
+    photo_filename = save_place_photo(data.get("photo_data")) if data.get("photo_data") else ""
+    try:
+        with DB_LOCK, database() as db:
+            values = validate_place(data)
+            get_category(db, values["category_id"])
+            now = iso_now()
+            cached_at = now if values["latitude"] is not None else None
             cursor = db.execute(
                 """
                 INSERT INTO places(
                     provider, provider_place_id, label, category_id, country_code,
-                    region, locality, district, planned_month, memo, latitude, longitude,
-                    location_cached_at, place_id_refreshed_at, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    region, locality, district, planned_month, memo, photo_filename,
+                    latitude, longitude, location_cached_at, place_id_refreshed_at,
+                    created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     values["provider"], values["provider_place_id"], values["label"],
                     values["category_id"], values["country_code"], values["region"],
                     values["locality"], values["district"], values["planned_month"], values["memo"],
-                    values["latitude"], values["longitude"], cached_at,
+                    photo_filename, values["latitude"], values["longitude"], cached_at,
                     now if values["provider"] == "google" else None, now, now,
                 ),
             )
-        except sqlite3.IntegrityError:
-            raise ApiError(HTTPStatus.CONFLICT, "이미 저장한 장소입니다.") from None
-        row = db.execute(PLACE_SELECT + " WHERE p.id = ?", (cursor.lastrowid,)).fetchone()
+            row = db.execute(PLACE_SELECT + " WHERE p.id = ?", (cursor.lastrowid,)).fetchone()
+    except sqlite3.IntegrityError:
+        delete_place_photo(photo_filename)
+        raise ApiError(HTTPStatus.CONFLICT, "이미 저장한 장소입니다.") from None
+    except Exception:
+        delete_place_photo(photo_filename)
+        raise
     return row_to_place(row)
 
 
 def update_place(place_id: int, data: dict) -> dict:
-    with DB_LOCK, database() as db:
-        existing = db.execute("SELECT * FROM places WHERE id = ?", (place_id,)).fetchone()
-        if not existing:
-            raise ApiError(HTTPStatus.NOT_FOUND, "장소를 찾을 수 없습니다.")
-        values = validate_place(data, existing)
-        get_category(db, values["category_id"])
-        db.execute(
-            """
-            UPDATE places SET label=?, category_id=?, country_code=?, region=?, locality=?,
-                district=?, planned_month=?, memo=?, updated_at=? WHERE id=?
-            """,
-            (
-                values["label"], values["category_id"], values["country_code"],
-                values["region"], values["locality"], values["district"],
-                values["planned_month"], values["memo"], iso_now(), place_id,
-            ),
-        )
-        row = db.execute(PLACE_SELECT + " WHERE p.id = ?", (place_id,)).fetchone()
+    new_photo_filename: str | None = None
+    old_photo_filename = ""
+    try:
+        with DB_LOCK, database() as db:
+            existing = db.execute("SELECT * FROM places WHERE id = ?", (place_id,)).fetchone()
+            if not existing:
+                raise ApiError(HTTPStatus.NOT_FOUND, "장소를 찾을 수 없습니다.")
+            old_photo_filename = existing["photo_filename"] or ""
+            if data.get("photo_data"):
+                new_photo_filename = save_place_photo(data.get("photo_data"))
+                photo_filename = new_photo_filename
+            elif data.get("remove_photo") is True:
+                photo_filename = ""
+            else:
+                photo_filename = old_photo_filename
+            values = validate_place(data, existing)
+            get_category(db, values["category_id"])
+            db.execute(
+                """
+                UPDATE places SET label=?, category_id=?, country_code=?, region=?, locality=?,
+                    district=?, planned_month=?, memo=?, photo_filename=?, updated_at=? WHERE id=?
+                """,
+                (
+                    values["label"], values["category_id"], values["country_code"],
+                    values["region"], values["locality"], values["district"],
+                    values["planned_month"], values["memo"], photo_filename, iso_now(), place_id,
+                ),
+            )
+            row = db.execute(PLACE_SELECT + " WHERE p.id = ?", (place_id,)).fetchone()
+    except Exception:
+        if new_photo_filename:
+            delete_place_photo(new_photo_filename)
+        raise
+    if old_photo_filename and old_photo_filename != row["photo_filename"]:
+        delete_place_photo(old_photo_filename)
     return row_to_place(row)
 
 
@@ -495,9 +650,13 @@ def update_location_cache(place_id: int, data: dict) -> dict:
 
 def delete_place(place_id: int) -> None:
     with DB_LOCK, database() as db:
+        existing = db.execute("SELECT photo_filename FROM places WHERE id = ?", (place_id,)).fetchone()
+        if not existing:
+            raise ApiError(HTTPStatus.NOT_FOUND, "장소를 찾을 수 없습니다.")
         cursor = db.execute("DELETE FROM places WHERE id = ?", (place_id,))
         if cursor.rowcount == 0:
             raise ApiError(HTTPStatus.NOT_FOUND, "장소를 찾을 수 없습니다.")
+    delete_place_photo(existing["photo_filename"])
 
 
 def export_data() -> dict:
@@ -788,6 +947,10 @@ class JoyMapHandler(BaseHTTPRequestHandler):
                     "domestic_driving_configured": bool(KAKAO_REST_API_KEY),
                 })
                 return
+            if parsed.path.startswith("/media/place-photos/"):
+                self.require_auth()
+                self.serve_place_photo(parsed.path)
+                return
             if parsed.path.startswith("/api/"):
                 self.require_auth()
                 self.handle_api_get(parsed.path, parse_qs(parsed.query))
@@ -817,6 +980,8 @@ class JoyMapHandler(BaseHTTPRequestHandler):
                 self.send_json({"category": create_category(data)}, HTTPStatus.CREATED)
             elif parsed.path == "/api/places":
                 self.send_json({"place": create_place(data)}, HTTPStatus.CREATED)
+            elif parsed.path == "/api/share/resolve":
+                self.send_json({"place": resolve_naver_share_url(data.get("url"))})
             elif parsed.path == "/api/routes/driving":
                 self.send_json({
                     "route": plan_domestic_driving_route(
@@ -1008,6 +1173,22 @@ class JoyMapHandler(BaseHTTPRequestHandler):
             self.send_header("Expires", "0")
         else:
             self.send_header("Cache-Control", "public, max-age=3600")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def serve_place_photo(self, path: str) -> None:
+        filename = path.removeprefix("/media/place-photos/")
+        if not PHOTO_FILENAME_RE.fullmatch(filename):
+            raise ApiError(HTTPStatus.NOT_FOUND, "사진을 찾을 수 없습니다.")
+        file_path = photo_directory() / filename
+        if not file_path.is_file():
+            raise ApiError(HTTPStatus.NOT_FOUND, "사진을 찾을 수 없습니다.")
+        body = file_path.read_bytes()
+        content_type = {"jpg": "image/jpeg", "png": "image/png", "webp": "image/webp"}[file_path.suffix[1:]]
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "private, max-age=86400")
         self.end_headers()
         self.wfile.write(body)
 

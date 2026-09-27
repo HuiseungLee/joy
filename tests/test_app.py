@@ -1,4 +1,5 @@
 import importlib.util
+import base64
 import json
 import tempfile
 import threading
@@ -78,6 +79,67 @@ class JoyMapDatabaseTests(unittest.TestCase):
         with self.assertRaises(app.ApiError) as caught:
             app.create_place(payload)
         self.assertEqual(caught.exception.status, 409)
+
+    def test_place_photo_create_replace_and_remove(self):
+        category_id = app.list_categories()[0]["id"]
+        first_photo = "data:image/jpeg;base64," + base64.b64encode(b"\xff\xd8\xfffirst-photo").decode()
+        second_photo = "data:image/png;base64," + base64.b64encode(b"\x89PNG\r\n\x1a\nsecond-photo").decode()
+        created = app.create_place({
+            "provider": "manual",
+            "provider_place_id": "manual:photo-test",
+            "label": "사진 장소",
+            "category_id": category_id,
+            "latitude": 37.5,
+            "longitude": 127.0,
+            "photo_data": first_photo,
+        })
+        first_path = app.DATA_DIR / created["photo_url"].removeprefix("/media/")
+        self.assertTrue(first_path.is_file())
+
+        updated = app.update_place(created["id"], {"photo_data": second_photo})
+        second_path = app.DATA_DIR / updated["photo_url"].removeprefix("/media/")
+        self.assertTrue(second_path.is_file())
+        self.assertFalse(first_path.exists())
+
+        removed = app.update_place(created["id"], {"remove_photo": True})
+        self.assertEqual(removed["photo_url"], "")
+        self.assertFalse(second_path.exists())
+
+    def test_resolve_naver_short_place_url(self):
+        class FakeResponse:
+            def __init__(self, url, payload=b""):
+                self.url = url
+                self.payload = payload
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_):
+                return False
+
+            def geturl(self):
+                return self.url
+
+            def read(self, _limit=-1):
+                return self.payload
+
+        final_url = "https://map.naver.com/p/entry/place/1661498565?placePath=%2Fhome"
+        summary = json.dumps({
+            "data": {"placeDetail": {
+                "name": "훈데르트힐즈",
+                "coordinate": {"latitude": 33.4942048, "longitude": 126.9552257},
+                "address": {"roadAddress": "제주 제주시 우도면 우도해안길 32-24 훈데르트힐즈"},
+            }}
+        }, ensure_ascii=False).encode()
+        with patch.object(app, "open_naver_url", side_effect=[
+            FakeResponse(final_url),
+            FakeResponse("https://map.naver.com/p/api/place/summary/1661498565", summary),
+        ]):
+            resolved = app.resolve_naver_share_url("https://naver.me/5r9zCDGT")
+        self.assertEqual(resolved["name"], "훈데르트힐즈")
+        self.assertEqual(resolved["naver_place_id"], "1661498565")
+        self.assertEqual(resolved["country_code"], "KR")
+        self.assertAlmostEqual(resolved["latitude"], 33.4942048)
 
     def test_planned_month_validation(self):
         category_id = app.list_categories()[0]["id"]

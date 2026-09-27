@@ -39,6 +39,8 @@ const state = {
   mapPlaceLoadingId: null,
   sharePreviewMarker: null,
   pendingSharedPlace: null,
+  pendingPlacePhoto: null,
+  removePlacePhoto: false,
   drawerFromShared: false,
   activePlaceId: null,
   activeDetailPlaceId: null,
@@ -78,6 +80,7 @@ const els = {
   placeDetailClose: $("#place-detail-close"),
   placeDetailCategory: $("#place-detail-category"),
   placeDetailTitle: $("#place-detail-title"),
+  placeDetailPhoto: $("#place-detail-photo"),
   placeDetailLocation: $("#place-detail-location"),
   placeDetailMemo: $("#place-detail-memo"),
   placeDetailEdit: $("#place-detail-edit"),
@@ -126,6 +129,10 @@ const els = {
   region: $("#region"),
   locality: $("#locality"),
   district: $("#district"),
+  placePhoto: $("#place-photo"),
+  placePhotoPreview: $("#place-photo-preview"),
+  placePhotoImage: $("#place-photo-image"),
+  removePlacePhoto: $("#remove-place-photo"),
   memo: $("#memo"),
   deletePlaceButton: $("#delete-place-button"),
   cancelPlaceButton: $("#cancel-place-button"),
@@ -255,6 +262,8 @@ function bindEvents() {
   window.addEventListener("pointercancel", finishRouteStopDrag);
   els.drawerBackdrop.addEventListener("click", closeDrawer);
   els.placeForm.addEventListener("submit", savePlace);
+  els.placePhoto.addEventListener("change", handlePlacePhotoChange);
+  els.removePlacePhoto.addEventListener("click", removeSelectedPlacePhoto);
   els.shareForm.addEventListener("submit", handleSharedMessage);
   els.deletePlaceButton.addEventListener("click", deleteCurrentPlace);
   els.categoryManageButton.addEventListener("click", openCategoryDialog);
@@ -473,6 +482,9 @@ function openPlaceDetail(place) {
   document.body.classList.add("place-detail-open");
   els.placeDetailCategory.textContent = [place.category_name, place.planned_month ? `${place.planned_month}월 방문` : ""].filter(Boolean).join(" · ");
   els.placeDetailTitle.textContent = place.label;
+  els.placeDetailPhoto.hidden = !place.photo_url;
+  els.placeDetailPhoto.src = place.photo_url || "";
+  els.placeDetailPhoto.alt = place.photo_url ? `${place.label} 사진` : "";
   els.placeDetailLocation.textContent = [place.region, place.locality, place.district].filter(Boolean).join(" · ") || "위치 태그 없음";
   els.placeDetailMemo.textContent = place.memo || "저장된 메모가 없습니다.";
   els.placeDetailMemo.classList.toggle("is-empty", !place.memo);
@@ -788,18 +800,24 @@ async function handleSharedMessage(event) {
     els.shareStatus.textContent = "Google 지도 API 설정을 먼저 완료해 주세요.";
     return;
   }
-  const parsed = parseSharedPlaceMessage(els.shareMessage.value);
-  if (!parsed.name) {
-    els.shareStatus.hidden = false;
-    els.shareStatus.textContent = "링크만 붙이지 말고 장소명과 주소가 포함된 공유문 전체를 붙여넣어 주세요.";
-    return;
-  }
+  let parsed = parseSharedPlaceMessage(els.shareMessage.value);
   const submit = els.shareForm.querySelector("button[type='submit']");
   submit.disabled = true;
   els.shareStatus.hidden = false;
   els.shareStatus.className = "inline-status compact-status is-loading";
-  els.shareStatus.textContent = `‘${parsed.name}’ 위치를 찾는 중…`;
+  els.shareStatus.textContent = parsed.name ? `‘${parsed.name}’ 위치를 찾는 중…` : "공유 링크에서 장소 정보를 확인하는 중…";
   try {
+    if (!parsed.name && parsed.url) {
+      const resolved = await api("/api/share/resolve", {
+        method: "POST",
+        body: JSON.stringify({ url: parsed.url }),
+      });
+      parsed = { ...parsed, ...resolved.place, raw: parsed.raw, url: parsed.url };
+      els.shareStatus.textContent = `‘${parsed.name}’ 위치를 찾는 중…`;
+    }
+    if (!parsed.name) {
+      throw new Error("장소명·주소가 포함된 공유문 또는 네이버 장소 링크를 입력해 주세요.");
+    }
     const request = {
       textQuery: parsed.query,
       fields: ["id", "displayName", "formattedAddress", "location", "googleMapsURI", "addressComponents"],
@@ -808,21 +826,43 @@ async function handleSharedMessage(event) {
     const { places = [] } = await state.Place.searchByText(request);
     const matches = places.filter((place) => place.id && place.location);
     if (!matches.length) {
-      els.shareStatus.className = "inline-status compact-status";
-      els.shareStatus.textContent = "일치하는 장소를 찾지 못했습니다. 장소명과 도로명 주소를 확인해 주세요.";
+      if (!Number.isFinite(parsed.latitude) || !Number.isFinite(parsed.longitude) || !parsed.naver_place_id) {
+        throw new Error("일치하는 장소를 찾지 못했습니다. 장소명과 도로명 주소를 확인해 주세요.");
+      }
+      const fallbackPlace = {
+        id: `manual:naver:${parsed.naver_place_id}`,
+        displayName: parsed.name,
+        formattedAddress: parsed.address,
+        location: { toJSON: () => ({ lat: parsed.latitude, lng: parsed.longitude }) },
+        addressComponents: [],
+      };
+      parsed.provider = "manual";
+      parsed.provider_place_id = fallbackPlace.id;
+      showSharedPlacePreview(fallbackPlace, parsed);
+      revealMapForMobile();
+      toast("네이버 링크에서 확인한 위치를 지도에 표시했습니다.");
       return;
     }
     const normalizedName = parsed.name.replace(/\s+/g, "").toLocaleLowerCase("ko");
-    const bestMatch = matches.find((place) =>
+    let bestMatch = matches.find((place) =>
       (place.displayName || "").replace(/\s+/g, "").toLocaleLowerCase("ko") === normalizedName
     ) || matches[0];
+    if (Number.isFinite(parsed.latitude) && Number.isFinite(parsed.longitude)) {
+      bestMatch = [...matches].sort((a, b) => {
+        const locationA = a.location.toJSON();
+        const locationB = b.location.toJSON();
+        const distanceA = (locationA.lat - parsed.latitude) ** 2 + (locationA.lng - parsed.longitude) ** 2;
+        const distanceB = (locationB.lat - parsed.latitude) ** 2 + (locationB.lng - parsed.longitude) ** 2;
+        return distanceA - distanceB;
+      })[0];
+    }
     showSharedPlacePreview(bestMatch, parsed);
     revealMapForMobile();
     toast("지도에서 검색된 위치를 확인해 주세요.");
   } catch (error) {
     console.error(error);
     els.shareStatus.className = "inline-status compact-status";
-    els.shareStatus.textContent = "장소를 찾지 못했습니다. 잠시 후 다시 시도해 주세요.";
+    els.shareStatus.textContent = error.message || "장소를 찾지 못했습니다. 잠시 후 다시 시도해 주세요.";
   } finally {
     submit.disabled = false;
   }
@@ -883,6 +923,12 @@ function confirmSharedPlace() {
     memo: pending.parsed.raw,
     kicker: "IMPORTED FROM SHARED MESSAGE",
     fromShared: true,
+    provider: pending.parsed.provider,
+    providerPlaceId: pending.parsed.provider_place_id,
+    countryCode: pending.parsed.country_code,
+    region: pending.parsed.region,
+    locality: pending.parsed.locality,
+    district: pending.parsed.district,
   });
 }
 
@@ -2010,6 +2056,81 @@ function revealMapForMobile() {
   els.mapStage.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
+function loadImageFile(file) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    const url = URL.createObjectURL(file);
+    image.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(image);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("사진을 읽지 못했습니다."));
+    };
+    image.src = url;
+  });
+}
+
+function canvasDataUrl(canvas, quality) {
+  return canvas.toDataURL("image/jpeg", quality);
+}
+
+async function preparePlacePhoto(file) {
+  if (!/^image\/(?:jpeg|png|webp)$/.test(file.type)) {
+    throw new Error("JPG, PNG, WebP 사진만 선택해 주세요.");
+  }
+  if (file.size > 15_000_000) throw new Error("원본 사진은 15MB 이하여야 합니다.");
+  const image = await loadImageFile(file);
+  const render = (maxDimension, quality) => {
+    const scale = Math.min(1, maxDimension / Math.max(image.naturalWidth, image.naturalHeight));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+    canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+    const context = canvas.getContext("2d", { alpha: false });
+    if (!context) throw new Error("이 브라우저에서는 사진을 처리할 수 없습니다.");
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    return canvasDataUrl(canvas, quality);
+  };
+  let dataUrl = render(1600, .82);
+  if (dataUrl.length > 1_950_000) dataUrl = render(1200, .72);
+  if (dataUrl.length > 1_950_000) dataUrl = render(900, .64);
+  if (dataUrl.length > 1_950_000) throw new Error("사진 용량을 줄이지 못했습니다. 다른 사진을 선택해 주세요.");
+  return dataUrl;
+}
+
+function showPlacePhotoPreview(source) {
+  els.placePhotoImage.src = source;
+  els.placePhotoPreview.hidden = false;
+}
+
+async function handlePlacePhotoChange() {
+  const file = els.placePhoto.files?.[0];
+  if (!file) return;
+  els.placePhoto.disabled = true;
+  try {
+    const dataUrl = await preparePlacePhoto(file);
+    state.pendingPlacePhoto = dataUrl;
+    state.removePlacePhoto = false;
+    showPlacePhotoPreview(dataUrl);
+  } catch (error) {
+    els.placePhoto.value = "";
+    toast(error.message, true);
+  } finally {
+    els.placePhoto.disabled = false;
+  }
+}
+
+function removeSelectedPlacePhoto() {
+  state.pendingPlacePhoto = null;
+  state.removePlacePhoto = true;
+  els.placePhoto.value = "";
+  els.placePhotoImage.removeAttribute("src");
+  els.placePhotoPreview.hidden = true;
+}
+
 function openDrawerForSearch(place, options = {}) {
   const location = place.location.toJSON();
   const region = parseAddressComponents(place.addressComponents || []);
@@ -2019,15 +2140,15 @@ function openDrawerForSearch(place, options = {}) {
   els.sourcePreview.hidden = false;
   els.sourceName.textContent = place.displayName || "Google 장소";
   els.sourceAddress.textContent = place.formattedAddress || "";
-  els.provider.value = "google";
-  els.providerPlaceId.value = place.id;
+  els.provider.value = options.provider || "google";
+  els.providerPlaceId.value = options.providerPlaceId || place.id;
   els.latitude.value = location.lat;
   els.longitude.value = location.lng;
   els.placeLabel.value = options.label || place.displayName || "";
-  els.countryCode.value = region.country_code;
-  els.region.value = region.region;
-  els.locality.value = region.locality;
-  els.district.value = region.district;
+  els.countryCode.value = options.countryCode || region.country_code;
+  els.region.value = options.region || region.region;
+  els.locality.value = options.locality || region.locality;
+  els.district.value = options.district || region.district;
   els.memo.value = options.memo || "";
   state.drawerFromShared = Boolean(options.fromShared);
   openDrawer();
@@ -2088,6 +2209,7 @@ function openDrawerForEdit(place) {
   els.locality.value = place.locality;
   els.district.value = place.district;
   els.memo.value = place.memo;
+  if (place.photo_url) showPlacePhotoPreview(place.photo_url);
   els.deletePlaceButton.hidden = false;
   state.drawerFromShared = false;
   revealMapForMobile();
@@ -2107,6 +2229,11 @@ function resetPlaceForm() {
   els.longitude.value = "";
   els.sourcePreview.hidden = true;
   els.deletePlaceButton.hidden = true;
+  state.pendingPlacePhoto = null;
+  state.removePlacePhoto = false;
+  els.placePhoto.value = "";
+  els.placePhotoImage.removeAttribute("src");
+  els.placePhotoPreview.hidden = true;
   els.placeCategory.value = String(state.categories[0]?.id || "");
   els.plannedMonth.value = "";
 }
@@ -2145,6 +2272,8 @@ async function savePlace(event) {
     latitude: els.latitude.value === "" ? null : Number(els.latitude.value),
     longitude: els.longitude.value === "" ? null : Number(els.longitude.value),
   };
+  if (state.pendingPlacePhoto) payload.photo_data = state.pendingPlacePhoto;
+  if (state.removePlacePhoto) payload.remove_photo = true;
   const submit = els.placeForm.querySelector("button[type='submit']");
   submit.disabled = true;
   try {

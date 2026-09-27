@@ -193,6 +193,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .two-column { display: grid; grid-template-columns: 1fr 1fr; gap: 11px; }
 .section-label { margin: 6px 0 10px; color: var(--ink); font-size: .78rem; font-weight: 900; letter-spacing: .08em; }
 .policy-note { margin: -5px 0 16px; color: #737c89; font-size: .72rem; line-height: 1.5; }
+.photo-field > input[type="file"] { padding: 9px; font-size: .8rem; }
+.photo-field > small { display: block; margin-top: 6px; color: #737c89; font-size: .7rem; }
+.place-photo-preview { position: relative; overflow: hidden; margin-top: 9px; border: 1px solid var(--line); border-radius: 12px; background: #f1eee8; }
+.place-photo-preview img { display: block; width: 100%; max-height: 250px; object-fit: cover; }
+.place-photo-preview button { position: absolute; right: 9px; bottom: 9px; min-height: 34px; border-color: rgba(19,34,56,.22); background: rgba(255,255,255,.94); padding: 6px 11px; font-size: .75rem; }
 .memo-field { flex: 1; }
 .drawer-actions { position: sticky; bottom: -26px; display: flex; gap: 8px; margin: 16px -26px -26px; border-top: 1px solid var(--line); background: rgba(255,253,249,.96); padding: 16px 26px 22px; }
 .action-spacer { flex: 1; }
@@ -218,6 +223,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .place-detail-kicker { display: block; margin-bottom: 5px; color: var(--accent-dark); font-size: .7rem; font-weight: 900; letter-spacing: .08em; }
 .place-detail h2 { margin: 0; font: 700 1.55rem/1.2 Georgia, serif; letter-spacing: -.035em; }
 .place-detail-header .icon-button { width: 32px; height: 32px; flex: 0 0 auto; }
+.place-detail-photo { display: block; width: calc(100% + 36px); max-height: 230px; margin: 14px -18px 0; object-fit: cover; }
 .place-detail-location { margin: 13px 0 0; color: #5f6b7d; font-size: .82rem; line-height: 1.55; }
 .place-detail-memo { max-height: 150px; overflow: auto; margin: 13px 0 0; border-radius: 11px; background: #f5f2ec; padding: 12px; color: #314057; font-size: .9rem; line-height: 1.65; white-space: pre-wrap; }
 .place-detail-memo.is-empty { color: #7a8390; font-style: italic; }
