@@ -985,6 +985,12 @@ class JoyMapHandler(BaseHTTPRequestHandler):
             "/app.css": STATIC_DIR / "app.css",
             "/app.js": STATIC_DIR / "app.js",
             "/favicon.svg": STATIC_DIR / "favicon.svg",
+            "/icon-192.png": STATIC_DIR / "icon-192.png",
+            "/icon-512.png": STATIC_DIR / "icon-512.png",
+            "/manifest.webmanifest": STATIC_DIR / "manifest.webmanifest",
+            "/service-worker.js": STATIC_DIR / "service-worker.js",
+            "/offline.html": STATIC_DIR / "offline.html",
+            "/.well-known/assetlinks.json": STATIC_DIR / "assetlinks.json",
             "/privacy.html": STATIC_DIR / "privacy.html",
             "/terms.html": STATIC_DIR / "terms.html",
         }
@@ -996,7 +1002,7 @@ class JoyMapHandler(BaseHTTPRequestHandler):
         self.send_response(HTTPStatus.OK)
         self.send_header("Content-Type", f"{content_type}; charset=utf-8" if content_type.startswith("text/") else content_type)
         self.send_header("Content-Length", str(len(body)))
-        if file_path.suffix in {".html", ".js", ".css"}:
+        if file_path.suffix in {".html", ".js", ".css", ".webmanifest", ".json"}:
             self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
             self.send_header("Pragma", "no-cache")
             self.send_header("Expires", "0")

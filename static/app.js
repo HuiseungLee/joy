@@ -2295,4 +2295,11 @@ if (window.location.protocol === "http:" && !["localhost", "127.0.0.1"].includes
   window.location.replace(`https://${window.location.host}${window.location.pathname}${window.location.search}${window.location.hash}`);
 } else {
   bootstrap();
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("/service-worker.js").catch((error) => {
+        console.warn("Service worker registration failed", error);
+      });
+    });
+  }
 }

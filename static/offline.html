@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#132238">
+  <title>연결 확인 · PRINSS MAP</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { min-height: 100vh; display: grid; margin: 0; place-items: center; background: #fffdf9; color: #132238; font-family: system-ui, sans-serif; }
+    main { width: min(420px, calc(100% - 40px)); text-align: center; }
+    .mark { display: grid; width: 64px; height: 64px; margin: 0 auto 22px; place-items: center; border-radius: 18px 18px 18px 5px; background: #ff6546; color: white; font: 800 1.35rem Georgia, serif; }
+    h1 { margin: 0; font: 700 2rem Georgia, serif; }
+    p { color: #536174; line-height: 1.7; }
+    button { min-height: 44px; border: 0; border-radius: 10px; background: #132238; color: white; padding: 10px 22px; font-weight: 800; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="mark">SS</div>
+    <h1>인터넷 연결을 확인해 주세요</h1>
+    <p>PRINSS MAP은 지도와 저장 장소를 불러오기 위해 NAS 서버 연결이 필요합니다.</p>
+    <button type="button" onclick="location.reload()">다시 시도</button>
+  </main>
+</body>
+</html>
