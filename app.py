@@ -1152,6 +1152,7 @@ class JoyMapHandler(BaseHTTPRequestHandler):
             "/favicon.svg": STATIC_DIR / "favicon.svg",
             "/icon-192.png": STATIC_DIR / "icon-192.png",
             "/icon-512.png": STATIC_DIR / "icon-512.png",
+            "/icon-maskable-512.png": STATIC_DIR / "icon-maskable-512.png",
             "/manifest.webmanifest": STATIC_DIR / "manifest.webmanifest",
             "/service-worker.js": STATIC_DIR / "service-worker.js",
             "/offline.html": STATIC_DIR / "offline.html",
