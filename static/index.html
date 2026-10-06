@@ -11,7 +11,7 @@
   <link rel="icon" href="/favicon.svg?v=2" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/icon-192.png">
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/app.css?v=20260927-7">
+  <link rel="stylesheet" href="/app.css?v=20261006-1">
 </head>
 <body>
   <section id="login-screen" class="login-screen" aria-labelledby="login-title">
@@ -140,6 +140,14 @@
           <img id="place-detail-photo" class="place-detail-photo" alt="" hidden>
           <p id="place-detail-location" class="place-detail-location"></p>
           <p id="place-detail-memo" class="place-detail-memo"></p>
+          <div id="place-detail-map-links" class="place-detail-map-links" aria-label="외부 지도에서 보기">
+            <a id="place-detail-naver-map" class="external-map-link naver-map-link" target="_blank" rel="noopener noreferrer">
+              <span aria-hidden="true">N</span> 네이버지도
+            </a>
+            <a id="place-detail-kakao-map" class="external-map-link kakao-map-link" target="_blank" rel="noopener noreferrer">
+              <span aria-hidden="true">K</span> 카카오맵
+            </a>
+          </div>
           <div class="place-detail-route-actions" aria-label="경로 지점으로 지정">
             <button type="button" data-place-route-role="start"><span>●</span> 출발</button>
             <button type="button" data-place-route-role="via"><span>◆</span> 경유</button>
@@ -329,6 +337,6 @@
   </dialog>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="/app.js?v=20260927-11" defer></script>
+  <script src="/app.js?v=20261006-1" defer></script>
 </body>
 </html>

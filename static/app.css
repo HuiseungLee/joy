@@ -247,6 +247,12 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .place-detail-location { margin: 13px 0 0; color: #5f6b7d; font-size: .82rem; line-height: 1.55; }
 .place-detail-memo { max-height: 150px; overflow: auto; margin: 13px 0 0; border-radius: 11px; background: #f5f2ec; padding: 12px; color: #314057; font-size: .9rem; line-height: 1.65; white-space: pre-wrap; }
 .place-detail-memo.is-empty { color: #7a8390; font-style: italic; }
+.place-detail-map-links { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 11px; }
+.external-map-link { display: flex; min-height: 42px; align-items: center; justify-content: center; gap: 7px; border: 1px solid #ccd5e4; border-radius: 10px; background: white; color: var(--ink); font-size: .82rem; font-weight: 900; text-decoration: none; transition: border-color .15s ease, background .15s ease, transform .15s ease; }
+.external-map-link:hover, .external-map-link:focus-visible { border-color: var(--blue); background: #f7f9fc; outline: none; transform: translateY(-1px); }
+.external-map-link span { display: grid; width: 22px; height: 22px; place-items: center; border-radius: 7px; color: white; font-size: .72rem; font-weight: 950; }
+.naver-map-link span { background: #03c75a; }
+.kakao-map-link span { background: #fee500; color: #191919; }
 .place-detail-route-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin-top: 14px; }
 .place-detail-route-actions button { min-height: 42px; border: 1px solid #ccd5e4; border-radius: 10px; background: white; color: var(--ink); font-size: .82rem; font-weight: 900; }
 .place-detail-route-actions button:hover { border-color: var(--blue); background: #edf3ff; color: var(--blue); }

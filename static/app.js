@@ -88,6 +88,8 @@ const els = {
   placeDetailPhoto: $("#place-detail-photo"),
   placeDetailLocation: $("#place-detail-location"),
   placeDetailMemo: $("#place-detail-memo"),
+  placeDetailNaverMap: $("#place-detail-naver-map"),
+  placeDetailKakaoMap: $("#place-detail-kakao-map"),
   placeDetailEdit: $("#place-detail-edit"),
   mapContextMenu: $("#map-context-menu"),
   shareConfirmCard: $("#share-confirm-card"),
@@ -558,11 +560,36 @@ function openPlaceDetail(place) {
   els.placeDetailLocation.textContent = [place.region, place.locality, place.district].filter(Boolean).join(" · ") || "위치 태그 없음";
   els.placeDetailMemo.textContent = place.memo || "저장된 메모가 없습니다.";
   els.placeDetailMemo.classList.toggle("is-empty", !place.memo);
+  const externalMapLinks = getExternalMapLinks(place);
+  els.placeDetailNaverMap.href = externalMapLinks.naver;
+  els.placeDetailKakaoMap.href = externalMapLinks.kakao;
+  els.placeDetailNaverMap.setAttribute("aria-label", `네이버지도에서 ${place.label} 보기`);
+  els.placeDetailKakaoMap.setAttribute("aria-label", `카카오맵에서 ${place.label} 보기`);
   els.placeDetail.hidden = false;
   setMobileSheetHeight(els.placeDetail, "--place-sheet-height", .4);
   els.routePlanner.classList.add("is-obscured");
   hideMapContextMenu();
   revealMapForMobile();
+}
+
+function getExternalMapLinks(place) {
+  const query = [place.label, place.region, place.locality, place.district]
+    .filter(Boolean)
+    .join(" ");
+  const encodedQuery = encodeURIComponent(query || place.label || "장소");
+  const naverPlaceId = /^manual:naver:(\d+)$/.exec(place.provider_place_id || "")?.[1];
+  const hasCoordinates = Number.isFinite(place.latitude)
+    && Number.isFinite(place.longitude)
+    && !place.location_cache_stale;
+  const naver = naverPlaceId
+    ? `https://map.naver.com/p/entry/place/${naverPlaceId}`
+    : hasCoordinates
+      ? `https://map.naver.com/p/search/${encodedQuery}?c=${place.longitude},${place.latitude},15,0,0,0,dh`
+      : `https://map.naver.com/p/search/${encodedQuery}`;
+  const kakao = hasCoordinates
+    ? `https://map.kakao.com/link/map/${encodeURIComponent(place.label || "저장 장소")},${place.latitude},${place.longitude}`
+    : `https://map.kakao.com/link/search/${encodedQuery}`;
+  return { naver, kakao };
 }
 
 function closePlaceDetail() {
