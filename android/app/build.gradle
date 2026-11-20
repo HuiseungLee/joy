@@ -22,7 +22,7 @@ plugins {
 
 def twaManifest = [
     applicationId: 'me.synology.lhsstart.map',
-    hostName: 'map.lhsstart.synology.me', // The domain being opened in the TWA.
+    hostName: 'map.foredu.synology.me', // The domain being opened in the TWA.
     launchUrl: '/?source=android', // The start path for the TWA. Must be relative to the domain.
     name: 'PRINSS MAP', // The application name.
     launcherName: 'PRINSS MAP', // The name shown on the Android Launcher.
@@ -57,8 +57,8 @@ android {
         applicationId "me.synology.lhsstart.map"
         minSdkVersion 23
         targetSdkVersion 36
-        versionCode 5
-        versionName "1.0.4"
+        versionCode 6
+        versionName "1.0.5"
 
         // The name for the application
         resValue "string", "appName", twaManifest.name
@@ -76,12 +76,12 @@ android {
             // The URL the Web Manifest for the Progressive Web App that the TWA points to. This
             // is used by Chrome OS and Meta Quest to open the Web version of the PWA instead of
             // the TWA, as it will probably give a better user experience for non-mobile devices.
-            resValue "string", "webManifestUrl", 'https://map.lhsstart.synology.me/manifest.webmanifest'
+            resValue "string", "webManifestUrl", 'https://map.foredu.synology.me/manifest.webmanifest'
 
 
 
             // This is used by Meta Quest.
-            resValue "string", "fullScopeUrl", 'https://map.lhsstart.synology.me/'
+            resValue "string", "fullScopeUrl", 'https://map.foredu.synology.me/'
 
 
 

@@ -34,7 +34,7 @@
         \"relation\": [\"delegate_permission/common.handle_all_urls\"],
         \"target\": {
             \"namespace\": \"web\",
-            \"site\": \"https://map.lhsstart.synology.me\"
+            \"site\": \"https://map.foredu.synology.me\"
         }
     }]
 

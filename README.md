@@ -28,7 +28,7 @@
 
 ```text
 인터넷
-  → https://map.lhsstart.synology.me
+  → https://map.foredu.synology.me
   → DSM 역방향 프록시·Let's Encrypt 인증서
   → 127.0.0.1:7330
   → PRINSS MAP 컨테이너
@@ -43,7 +43,7 @@ Container Manager를 권장합니다. Web Station만으로는 로그인 API와 S
 2. **Maps JavaScript API**, **Places API (New)**, **Routes API**를 활성화합니다.
 3. 사용자 인증 정보에서 API 키를 만듭니다.
 4. 애플리케이션 제한을 **웹사이트**로 설정하고 다음 리퍼러만 허용합니다.
-   - `https://map.lhsstart.synology.me/*`
+   - `https://map.foredu.synology.me/*`
    - 초기 내부 시험이 필요하면 `http://localhost:7330/*`를 임시 추가
 5. API 제한을 **Maps JavaScript API**, **Places API (New)**, **Routes API**로 한정합니다.
 6. Map Management에서 JavaScript용 Map ID를 만들거나, 첫 시험에는 `DEMO_MAP_ID`를 사용합니다.
@@ -71,15 +71,15 @@ Container Manager UI를 사용할 때는 **프로젝트 → 생성 → docker-co
 
 NAS 자체에서 확인할 주소는 `http://127.0.0.1:7330`입니다. 기본 Compose는 보안을 위해 `127.0.0.1`에만 연결합니다. 다른 PC에서 내부 확인이 필요하면 잠시 `127.0.0.1:` 부분을 제거하고 `.env`의 `COOKIE_SECURE=false`로 시험한 뒤, 두 설정을 반드시 원래대로 되돌리세요.
 
-## 3. map.lhsstart.synology.me 연결
+## 3. map.foredu.synology.me 연결
 
 1. 도메인의 A/AAAA 레코드 또는 DDNS가 NAS 공인 주소를 가리키게 합니다.
-2. DSM **제어판 → 보안 → 인증서**에서 `map.lhsstart.synology.me`용 Let's Encrypt 인증서를 발급합니다.
+2. DSM **제어판 → 보안 → 인증서**에서 `map.foredu.synology.me`용 Let's Encrypt 인증서를 발급합니다.
 3. DSM **제어판 → 로그인 포털 → 고급 → 역방향 프록시**에서 규칙을 만듭니다.
-   - 소스: HTTPS / `map.lhsstart.synology.me` / 443
+   - 소스: HTTPS / `map.foredu.synology.me` / 443
    - 대상: HTTP / `localhost` / 7330
 4. 생성한 인증서를 해당 호스트에 할당합니다.
-5. 공유기에서 외부 443 포트를 NAS로 전달하고 `https://map.lhsstart.synology.me`로 접속합니다.
+5. 공유기에서 외부 443 포트를 NAS로 전달하고 `https://map.foredu.synology.me`로 접속합니다.
 
 운영 환경에서는 `.env`의 `COOKIE_SECURE=true`를 유지하세요.
 
@@ -156,10 +156,10 @@ docker compose down
 
 ## Android 앱
 
-`android/`에는 `map.lhsstart.synology.me`를 전체 화면 앱으로 여는 Trusted Web Activity 프로젝트가 들어 있습니다. 패키지 ID는 `me.synology.lhsstart.map`이며 Android 6.0(API 23) 이상을 지원합니다.
+`android/`에는 `map.foredu.synology.me`를 전체 화면 앱으로 여는 Trusted Web Activity 프로젝트가 들어 있습니다. 패키지 ID는 기존 앱 업데이트 호환성을 위해 `me.synology.lhsstart.map`을 유지하며 Android 6.0(API 23) 이상을 지원합니다.
 
-- 휴대폰에 직접 설치: `artifacts/android/PRINSS-MAP-v1.0.3.apk`
-- Google Play 등록: `artifacts/android/PRINSS-MAP-v1.0.3.aab`
+- 휴대폰에 직접 설치: `artifacts/android/PRINSS-MAP-v1.0.5.apk`
+- Google Play 등록: `artifacts/android/PRINSS-MAP-v1.0.5.aab`
 - 업데이트 서명에 필요한 키와 비밀번호 안내는 `artifacts/android/`에 별도로 보관하며 Git에는 올리지 않습니다.
 
 브라우저 주소창 없이 전체 화면으로 열리려면 이 저장소의 `static/assetlinks.json`이 운영 서버의 `/.well-known/assetlinks.json`으로 배포되어야 합니다. 배포 전에도 앱 설치는 가능하지만 사이트 검증이 완료될 때까지 브라우저 화면으로 열릴 수 있습니다.

@@ -1,6 +1,6 @@
 {
   "packageId": "me.synology.lhsstart.map",
-  "host": "map.lhsstart.synology.me",
+  "host": "map.foredu.synology.me",
   "name": "PRINSS MAP",
   "launcherName": "PRINSS MAP",
   "display": "standalone",
@@ -14,18 +14,18 @@
   "enableNotifications": false,
   "enableSiteSettingsShortcut": true,
   "startUrl": "/?source=android",
-  "iconUrl": "https://map.lhsstart.synology.me/icon-512.png",
-  "maskableIconUrl": "https://map.lhsstart.synology.me/icon-maskable-512.png",
+  "iconUrl": "https://map.foredu.synology.me/icon-512.png",
+  "maskableIconUrl": "https://map.foredu.synology.me/icon-maskable-512.png",
   "splashScreenFadeOutDuration": 300,
   "signingKey": {
     "path": "../artifacts/android/prinss-map-release.keystore",
     "alias": "prinss-map"
   },
-  "appVersion": "1.0.3",
-  "appVersionCode": 4,
+  "appVersion": "1.0.5",
+  "appVersionCode": 6,
   "shortcuts": [],
   "generatorApp": "bubblewrap-cli",
-  "webManifestUrl": "https://map.lhsstart.synology.me/manifest.webmanifest",
+  "webManifestUrl": "https://map.foredu.synology.me/manifest.webmanifest",
   "fallbackType": "customtabs",
   "features": {
     "locationDelegation": {
@@ -37,7 +37,7 @@
   },
   "isChromeOSOnly": false,
   "isMetaQuest": false,
-  "fullScopeUrl": "https://map.lhsstart.synology.me/",
+  "fullScopeUrl": "https://map.foredu.synology.me/",
   "minSdkVersion": 23,
   "orientation": "any",
   "fingerprints": [],
