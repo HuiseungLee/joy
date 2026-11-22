@@ -173,13 +173,11 @@ docker compose down
 1. GitHub에 `joy-map` 저장소를 만듭니다. 공개 저장소로 두어도 `.env`와 SQLite 데이터는 커밋되지 않지만, 개인 프로젝트라면 비공개 저장소를 권장합니다.
 2. 로컬 프로젝트의 `origin`을 해당 저장소로 지정하고 `main`을 푸시합니다.
 3. 저장소의 **Settings → Secrets and variables → Actions**에 문법 사이트와 동일한 NAS 접속값을 다음 이름으로 등록합니다.
-   - `NAS_HOST`
    - `NAS_PORT`
    - `NAS_USER`
    - `NAS_SSH_KEY`
-   - `NAS_KNOWN_HOSTS`
 
-GitHub는 기존 저장소의 비밀값을 다시 보여 주지 않으므로, 문법 사이트에 넣었던 원본 값을 새 저장소에도 한 번 등록해야 합니다.
+NAS 호스트는 `foredu.synology.me`로, 공개 SSH 호스트키는 `.github/synology-known-hosts`에 고정되어 있습니다. GitHub는 기존 저장소의 비밀값을 다시 보여 주지 않으므로, 문법 사이트에 넣었던 포트·사용자명·개인키 원본 값은 새 저장소에도 한 번 등록해야 합니다.
 
 ### 최초 한 번: NAS 체크아웃 설정
 
