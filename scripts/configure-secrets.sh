@@ -2,7 +2,7 @@
 
 set -eu
 
-APP_DIR="${APP_DIR:-/volume1/docker/joy-map}"
+APP_DIR="${APP_DIR:-/volume2/docker/map}"
 ENV_FILE="$APP_DIR/.env"
 
 fail() {
@@ -45,7 +45,7 @@ if [ -n "$kakao_key" ]; then
   valid_token "$kakao_key" || fail "Kakao REST API key contains unsupported characters"
 fi
 
-admin_password="$(read_hidden 'New JOY MAP password (8+ characters): ')"
+admin_password="$(read_hidden 'New PRINSS MAP password (8+ characters): ')"
 [ "${#admin_password}" -ge 8 ] || fail "Password must be at least 8 characters"
 valid_token "$admin_password" || fail "Use letters, numbers, and . _ - @ % + = : only"
 
@@ -72,9 +72,9 @@ app_gid="$(id -g)"
   printf 'GOOGLE_MAPS_API_KEY=%s\n' "$maps_key"
   printf 'GOOGLE_MAP_ID=%s\n' "$map_id"
   printf 'KAKAO_REST_API_KEY=%s\n' "$kakao_key"
-  printf 'JOY_MAP_PORT=7330\n'
-  printf 'JOY_MAP_UID=%s\n' "$app_uid"
-  printf 'JOY_MAP_GID=%s\n' "$app_gid"
+  printf 'MAP_PORT=7330\n'
+  printf 'MAP_UID=%s\n' "$app_uid"
+  printf 'MAP_GID=%s\n' "$app_gid"
 } > "$work_file"
 
 mv "$work_file" "$ENV_FILE"
@@ -84,5 +84,5 @@ unset maps_key map_id kakao_key admin_password confirm_password secret_key app_u
 trap - EXIT INT TERM HUP
 
 printf '\nSettings saved. A private backup was created at:\n%s\n' "$backup_file"
-printf 'Restarting JOY MAP...\n'
+printf 'Restarting PRINSS MAP...\n'
 sudo /bin/sh "$APP_DIR/scripts/synology-auto-deploy.sh"

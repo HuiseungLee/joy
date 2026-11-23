@@ -52,14 +52,14 @@ API 키는 브라우저에 전달되는 공개 식별자입니다. 비밀로 숨
 
 ## 2. Synology Container Manager 배포
 
-1. 이 폴더를 NAS의 `/volume1/docker/joy-map` 같은 위치에 복사합니다.
+1. 이 폴더를 NAS의 `/volume2/docker/map`에 복사합니다.
 2. `.env.example`을 `.env`로 복사하고 다음 값을 바꿉니다.
    - `APP_PASSWORD`: 8자 이상의 고유 비밀번호
    - `SECRET_KEY`: `openssl rand -hex 32` 결과
    - `GOOGLE_MAPS_API_KEY`: 제한을 설정한 브라우저 키
    - `GOOGLE_MAP_ID`: 생성한 Map ID
    - `KAKAO_REST_API_KEY`: 국내 자동차 길찾기용 카카오디벨로퍼스 REST API 키
-   - `JOY_MAP_UID`, `JOY_MAP_GID`: NAS 배포 계정에서 `id`를 실행해 확인한 숫자 값
+   - `MAP_UID`, `MAP_GID`: NAS 배포 계정에서 `id`를 실행해 확인한 숫자 값
 3. SSH 터미널에서 해당 폴더로 이동해 실행합니다.
 
 ```bash
@@ -88,7 +88,7 @@ NAS 자체에서 확인할 주소는 `http://127.0.0.1:7330`입니다. 기본 Co
 로그인 화면은 아이디 없이 비밀번호만 입력합니다. 기존 설정은 보존하고 비밀번호만 바꾸려면 NAS SSH에서 다음 명령을 실행하세요. 새 비밀번호는 화면에 표시되지 않으며, 기존 `.env`는 자동으로 백업됩니다.
 
 ```bash
-cd /volume1/docker/joy-map
+cd /volume2/docker/map
 sh scripts/set-password.sh
 ```
 
@@ -115,7 +115,7 @@ Google Maps Platform의 공식 지원표에서는 대한민국의 자동차 길�
 기존 설정을 보존하면서 카카오 REST API 키만 안전하게 교체하려면 NAS SSH에서 실행합니다. 입력한 키는 화면과 명령 기록에 표시되지 않으며, 32자 키를 두 번 붙여넣는 실수도 검사합니다.
 
 ```sh
-cd /volume1/docker/joy-map
+cd /volume2/docker/map
 sh scripts/set-kakao-key.sh
 ```
 
@@ -166,11 +166,11 @@ docker compose down
 
 ## GitHub 푸시 자동 배포
 
-이 프로젝트는 문법 사이트와 같은 배포 흐름을 사용합니다. `main` 브랜치에 푸시되면 `.github/workflows/deploy-synology.yml`이 NAS에 SSH로 접속하고, `/volume1/docker/joy-map/scripts/synology-auto-deploy.sh`를 실행합니다. 배포 스크립트는 최신 커밋만 fast-forward로 받은 뒤 이미지를 다시 만들고 `http://127.0.0.1:7330/api/health`가 정상인지 확인합니다.
+이 프로젝트는 문법 사이트와 같은 배포 흐름을 사용합니다. `main` 브랜치에 푸시되면 `.github/workflows/deploy-synology.yml`이 NAS에 SSH로 접속하고, `/volume2/docker/map/scripts/synology-auto-deploy.sh`를 실행합니다. 배포 스크립트는 최신 커밋만 fast-forward로 받은 뒤 이미지를 다시 만들고 `http://127.0.0.1:7330/api/health`가 정상인지 확인합니다.
 
 ### 최초 한 번: GitHub 저장소 설정
 
-1. GitHub에 `joy-map` 저장소를 만듭니다. 공개 저장소로 두어도 `.env`와 SQLite 데이터는 커밋되지 않지만, 개인 프로젝트라면 비공개 저장소를 권장합니다.
+1. GitHub 저장소를 준비합니다. 공개 저장소로 두어도 `.env`와 SQLite 데이터는 커밋되지 않지만, 개인 프로젝트라면 비공개 저장소를 권장합니다.
 2. 로컬 프로젝트의 `origin`을 해당 저장소로 지정하고 `main`을 푸시합니다.
 3. 저장소의 **Settings → Secrets and variables → Actions**에 문법 사이트와 동일한 NAS 접속값을 다음 이름으로 등록합니다.
    - `NAS_PORT`
@@ -184,10 +184,10 @@ NAS 호스트는 `foredu.synology.me`로, 공개 SSH 호스트키는 `.github/sy
 NAS에서 배포용 Git 자격 증명을 준비한 다음 아래처럼 프로젝트를 배치합니다. 비공개 저장소라면 읽기 전용 deploy key 또는 접근 토큰을 사용합니다.
 
 ```bash
-sudo mkdir -p /volume1/docker/joy-map
-sudo chown -R "$USER" /volume1/docker/joy-map
-git clone <JOY_MAP_GIT_URL> /volume1/docker/joy-map
-cd /volume1/docker/joy-map
+sudo mkdir -p /volume2/docker/map
+sudo chown -R "$USER" /volume2/docker/map
+git clone <MAP_GIT_URL> /volume2/docker/map
+cd /volume2/docker/map
 cp .env.example .env
 mkdir -p data
 chmod 700 data
@@ -198,7 +198,7 @@ chmod 700 data
 Synology의 `vi` 편집기가 익숙하지 않다면 다음 대화형 도구를 사용합니다. 입력한 API 키와 비밀번호는 화면에 표시되지 않으며, 기존 `.env`는 권한이 제한된 백업 파일로 보관됩니다.
 
 ```sh
-cd /volume1/docker/joy-map
+cd /volume2/docker/map
 sh scripts/configure-secrets.sh
 ```
 
@@ -210,7 +210,7 @@ curl -fsS http://127.0.0.1:7330/api/health
 GitHub Actions용 NAS 계정은 비밀번호 없이 해당 배포 스크립트만 `sudo`로 실행할 수 있도록 허용해야 합니다. 문법 사이트에서 쓰는 제한 규칙에 다음 경로를 추가하면 됩니다.
 
 ```text
-/bin/sh /volume1/docker/joy-map/scripts/synology-auto-deploy.sh
+/bin/sh /volume2/docker/map/scripts/synology-auto-deploy.sh
 ```
 
 이 1회 설정 후에는 변경 요청 뒤 **“커밋 푸시해줘”**라고 하면 `main` 푸시와 NAS 자동 배포까지 이어집니다. GitHub Actions의 **Deploy to Synology NAS** 실행 결과가 최종 배포 기록입니다.

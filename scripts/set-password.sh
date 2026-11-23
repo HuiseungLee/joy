@@ -2,7 +2,7 @@
 
 set -eu
 
-APP_DIR="${APP_DIR:-/volume1/docker/joy-map}"
+APP_DIR="${APP_DIR:-/volume2/docker/map}"
 ENV_FILE="$APP_DIR/.env"
 
 fail() {
@@ -30,7 +30,7 @@ valid_token() {
 [ -f "$ENV_FILE" ] || fail "$ENV_FILE not found"
 trap 'stty echo 2>/dev/null || true' EXIT INT TERM HUP
 
-new_password="$(read_hidden 'New JOY MAP password (8+ characters): ')"
+new_password="$(read_hidden 'New PRINSS MAP password (8+ characters): ')"
 [ "${#new_password}" -ge 8 ] || fail "Password must be at least 8 characters"
 valid_token "$new_password" || fail "Use letters, numbers, and . _ - @ % + = : only"
 
@@ -64,5 +64,5 @@ unset new_password confirm_password
 trap - EXIT INT TERM HUP
 
 printf '\nPassword updated. A private backup was created at:\n%s\n' "$backup_file"
-printf 'Restarting JOY MAP...\n'
+printf 'Restarting PRINSS MAP...\n'
 sudo /bin/sh "$APP_DIR/scripts/synology-auto-deploy.sh"

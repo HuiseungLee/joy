@@ -2,7 +2,7 @@
 
 set -eu
 
-APP_DIR="${APP_DIR:-/volume1/docker/joy-map}"
+APP_DIR="${APP_DIR:-/volume2/docker/map}"
 ENV_FILE="$APP_DIR/.env"
 
 fail() {
@@ -64,5 +64,5 @@ unset kakao_key confirm_key
 trap - EXIT INT TERM HUP
 
 printf '\nKakao REST API key updated. A private backup was created at:\n%s\n' "$backup_file"
-printf 'Restarting JOY MAP...\n'
+printf 'Restarting PRINSS MAP...\n'
 sudo /bin/sh "$APP_DIR/scripts/synology-auto-deploy.sh"

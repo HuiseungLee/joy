@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: joy-map-synology-deploy
+  group: map-synology-deploy
   cancel-in-progress: false
 
 jobs:
@@ -36,7 +36,7 @@ jobs:
           test -n "$NAS_USER"
           test -n "$NAS_SSH_KEY"
 
-          ssh_dir="$RUNNER_TEMP/joy-map-ssh"
+          ssh_dir="$RUNNER_TEMP/map-ssh"
           install -m 700 -d "$ssh_dir"
           printf '%s\n' "$NAS_SSH_KEY" | tr -d '\r' > "$ssh_dir/id_ed25519"
           install -m 600 "$GITHUB_WORKSPACE/.github/synology-known-hosts" "$ssh_dir/known_hosts"
@@ -54,4 +54,4 @@ jobs:
             -o UserKnownHostsFile="$ssh_dir/known_hosts" \
             -p "$NAS_PORT" \
             "$NAS_USER@$NAS_HOST" \
-            'sudo -n /bin/sh /volume1/docker/joy-map/scripts/synology-auto-deploy.sh || { echo "Retrying once after updating the deployment script." >&2; sudo -n /bin/sh /volume1/docker/joy-map/scripts/synology-auto-deploy.sh; }'
+            'sudo -n /bin/sh /volume2/docker/map/scripts/synology-auto-deploy.sh || { echo "Retrying once after updating the deployment script." >&2; sudo -n /bin/sh /volume2/docker/map/scripts/synology-auto-deploy.sh; }'

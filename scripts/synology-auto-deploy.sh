@@ -5,7 +5,7 @@ set -eu
 PATH="/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/packages/ContainerManager/target/usr/bin:/var/packages/Docker/target/usr/bin:${PATH:-}"
 export PATH
 
-APP_DIR="${APP_DIR:-/volume1/docker/joy-map}"
+APP_DIR="${APP_DIR:-/volume2/docker/map}"
 DEPLOY_REMOTE="${DEPLOY_REMOTE:-origin}"
 DEPLOY_BRANCH="${DEPLOY_BRANCH:-main}"
 HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:7330/api/health}"
@@ -77,5 +77,5 @@ while [ "$attempt" -le 45 ]; do
 done
 
 echo "Health check failed after deployment." >&2
-docker compose logs --tail=80 joy-map >&2 || true
+docker compose logs --tail=80 map >&2 || true
 exit 1

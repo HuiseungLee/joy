@@ -1,13 +1,13 @@
 services:
-  joy-map:
+  map:
     build: .
-    container_name: joy-map
+    container_name: map
     restart: unless-stopped
-    user: "${JOY_MAP_UID:-1026}:${JOY_MAP_GID:-100}"
+    user: "${MAP_UID:-1026}:${MAP_GID:-100}"
     env_file:
       - .env
     ports:
-      - "127.0.0.1:${JOY_MAP_PORT:-7330}:8080"
+      - "127.0.0.1:${MAP_PORT:-7330}:8080"
     volumes:
       - ./data:/data
     read_only: true
